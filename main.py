@@ -5,7 +5,7 @@ import numpy as np
 BG_PATH = 'images/bg.png'      
 POD_PATH = 'images/pod.jpg'    
 SEED_PATH = 'images/seed.jpg'  
-OUTPUT_PATH = 'result_final_v3.jpg'
+OUTPUT_PATH = 'result_final_v4.jpg'
 
 class UltimatePaster:
     def __init__(self, bg_path):
@@ -50,9 +50,9 @@ class UltimatePaster:
 
     def interactive_place(self, inset_img):
         """ 
-        >>> 游戏级交互模式 <<<
+        >>> 滚轮版交互模式 <<<
         - 鼠标移动：控制位置
-        - 键盘 W/S：放大/缩小 (每次 1%)
+        - 鼠标滚轮：放大/缩小 (每次 5%)
         - 鼠标左键：确认放置
         """
         # 初始缩放设为背景宽度的 35%
@@ -63,31 +63,43 @@ class UltimatePaster:
         placed = False
         
         # 窗口设置
-        win_name = "WASD to Resize | Click to Confirm"
+        win_name = "Mouse Wheel to Resize | Click to Confirm"
         cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
         
-        # 预计算显示缩放比例（为了在你的屏幕上能完整看到背景图）
+        # 预计算显示缩放比例
         screen_h = 900.0
         bg_h, bg_w = self.bg.shape[:2]
         disp_scale = screen_h / bg_h if bg_h > screen_h else 1.0
         
-        # 鼠标回调：只更新位置坐标
+        # === 核心修改：鼠标回调函数 ===
         def mouse_callback(event, x, y, flags, param):
-            nonlocal placed
+            nonlocal placed, current_scale
             # 映射回真实坐标
             real_x = int(x / disp_scale)
             real_y = int(y / disp_scale)
             
             if event == cv2.EVENT_MOUSEMOVE:
+                # 更新位置
                 pos[0], pos[1] = real_x, real_y
+                
+            elif event == cv2.EVENT_MOUSEWHEEL:
+                # 滚轮缩放逻辑
+                # flags > 0 表示向前滚(放大)，flags < 0 表示向后滚(缩小)
+                if flags > 0:
+                    current_scale *= 1.05 # 放大 5%
+                else:
+                    current_scale *= 0.95 # 缩小 5%
+                print(f"当前缩放比例: {current_scale:.2f}")
+                
             elif event == cv2.EVENT_LBUTTONDOWN:
-                placed = True # 点击确认
+                # 确认放置
+                placed = True 
 
         cv2.setMouseCallback(win_name, mouse_callback)
         
         print(">>> 进入调整模式：")
         print("    [鼠标移动] 选择位置")
-        print("    [W / S] 放大 / 缩小")
+        print("    [鼠标滚轮] 放大 / 缩小")
         print("    [鼠标左键] 确认并保存")
 
         while not placed:
@@ -96,44 +108,34 @@ class UltimatePaster:
             new_w, new_h = int(w_i * current_scale), int(h_i * current_scale)
             inset_resized = cv2.resize(inset_img, (new_w, new_h))
             
-            # 2. 在背景副本上绘制预览
-            # 为了性能，我们只在每一帧复制一次背景
+            # 2. 绘制预览
             preview = self.bg.copy()
             
-            # 计算左上角坐标 (让鼠标位于插图中心)
+            # 让鼠标位于插图中心
             top_x = pos[0] - new_w // 2
             top_y = pos[1] - new_h // 2
             
-            # 边界保护与绘制
-            # 只在图像范围内绘制有效区域
+            # 边界计算
             y1, y2 = max(0, top_y), min(bg_h, top_y + new_h)
             x1, x2 = max(0, top_x), min(bg_w, top_x + new_w)
-            
-            # 对应的插图切片坐标
             iy1, iy2 = y1 - top_y, y2 - top_y
             ix1, ix2 = x1 - top_x, x2 - top_x
             
             if y2 > y1 and x2 > x1:
                 preview[y1:y2, x1:x2] = inset_resized[iy1:iy2, ix1:ix2]
-                # 画个绿框表示选中状态
-                cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 0), 2) # 绿框
 
-            # 3. 显示 (缩放以适应屏幕)
+            # 3. 显示
             disp_h, disp_w = int(bg_h * disp_scale), int(bg_w * disp_scale)
             cv2.imshow(win_name, cv2.resize(preview, (disp_w, disp_h)))
             
-            # 4. 键盘控制
-            key = cv2.waitKey(10) & 0xFF # 10ms 延迟，保证流畅
-            if key == ord('w'): # 放大
-                current_scale *= 1.02
-            elif key == ord('s'): # 缩小
-                current_scale *= 0.98
-            elif key == 27: # ESC 退出
+            key = cv2.waitKey(10) & 0xFF
+            if key == 27: # ESC 退出
                 break
         
         cv2.destroyWindow(win_name)
         
-        # 5. 循环结束，执行最终的“烙印”
+        # 4. 最终放置
         if placed:
             h_i, w_i = inset_img.shape[:2]
             new_w, new_h = int(w_i * current_scale), int(h_i * current_scale)
@@ -149,7 +151,7 @@ class UltimatePaster:
             
             if y2 > y1 and x2 > x1:
                 self.bg[y1:y2, x1:x2] = inset_final[iy1:iy2, ix1:ix2]
-                print(f"成功放置！位置: {top_x}, {top_y}, 缩放: {current_scale:.2f}")
+                print(f"成功放置！")
 
     def save(self):
         cv2.imwrite(OUTPUT_PATH, self.bg)
@@ -163,12 +165,12 @@ if __name__ == "__main__":
     roi1 = app.get_roi_zoomed(POD_PATH, "Select POD")
     if roi1 is not None:
         roi1 = app.match_background(roi1)
-        app.interactive_place(roi1) # 进入游戏模式
+        app.interactive_place(roi1) 
         
     print("\n>>> 步骤2: 提取种子")
     roi2 = app.get_roi_zoomed(SEED_PATH, "Select SEED")
     if roi2 is not None:
         roi2 = app.match_background(roi2)
-        app.interactive_place(roi2) # 进入游戏模式
+        app.interactive_place(roi2) 
         
     app.save()
