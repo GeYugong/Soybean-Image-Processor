@@ -1,193 +1,174 @@
 import cv2
 import numpy as np
-import os
 
 # === 配置区域 ===
-# 图片路径
-BG_PATH = 'images/bg.png'      # 你的背景图 (图4)
-POD_PATH = 'images/pod.jpg'    # 豆荚原图 (图2)
-SEED_PATH = 'images/seed.jpg'  # 种子原图 (图3)
-OUTPUT_PATH = 'result_final.jpg'
+BG_PATH = 'images/bg.png'      
+POD_PATH = 'images/pod.jpg'    
+SEED_PATH = 'images/seed.jpg'  
+OUTPUT_PATH = 'result_final_v3.jpg'
 
-class ImageProcessor:
+class UltimatePaster:
     def __init__(self, bg_path):
         self.bg = cv2.imread(bg_path)
         if self.bg is None:
             raise FileNotFoundError(f"找不到背景图: {bg_path}")
-        self.bg_display = self.bg.copy() # 用于显示的副本
+        # 计算背景基准值 (左上角)
+        self.bg_black_ref = np.mean(self.bg[0:50, 0:50], axis=(0, 1))
 
-    # def get_roi_interactive(self, img_path, win_name="Select ROI"):
-    #     """ 交互式提取：弹窗让用户框选要抠的物体 """
-    #     src = cv2.imread(img_path)
-    #     if src is None:
-    #         raise FileNotFoundError(f"找不到图片: {img_path}")
-        
-    #     print(f"请在弹出的窗口中框选 [{win_name}]，选好后按 ENTER 或 空格 确认。")
-    #     # cv2.selectROI 允许你用鼠标画框
-    #     x, y, w, h = cv2.selectROI(win_name, src, showCrosshair=True, fromCenter=False)
-    #     cv2.destroyWindow(win_name)
-        
-    #     if w == 0 or h == 0:
-    #         return None # 用户取消了
-        
-    #     return src[y:y+h, x:x+w]
-
-    def get_roi_interactive(self, img_path, win_name="Select ROI"):
-        """ 
-        交互式提取（修复版）：自动缩小图片以适应屏幕，
-        选完后自动映射回原图坐标。
-        """
+    def get_roi_zoomed(self, img_path, win_name="Select Region"):
+        """ (保持不变) 高清切片提取 """
         src = cv2.imread(img_path)
-        if src is None:
-            raise FileNotFoundError(f"找不到图片: {img_path}")
+        if src is None: raise FileNotFoundError(f"找不到: {img_path}")
         
-        # --- 新增逻辑：计算缩放比例 ---
         h, w = src.shape[:2]
-        # 设定一个屏幕能显示的最大高度（例如 800 像素）
-        target_h = 800.0 
+        target_h = 900.0 
+        scale = target_h / h if h > target_h else 1.0
         
-        if h > target_h:
-            scale = target_h / h
-            new_w = int(w * scale)
-            new_h = int(target_h)
-            # 生成一张缩略图用于显示
-            src_display = cv2.resize(src, (new_w, new_h))
+        if scale < 1.0:
+            src_disp = cv2.resize(src, (int(w * scale), int(target_h)))
         else:
-            scale = 1.0
-            src_display = src.copy()
+            src_disp = src.copy()
 
-        print(f"为了适应屏幕，显示缩放比例: {scale:.2f}")
-        print(f"请在弹出的窗口中框选 [{win_name}]，选好后按 ENTER 或 空格 确认。")
-        
-        # 这一行很关键：把窗口设为可调整大小（虽然 selectROI 有时会忽略这个，但加上保险）
-        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL) 
-        
-        # 在【缩略图】上进行框选
-        # x, y, w, h 是在缩略图上的坐标
-        roi_rect = cv2.selectROI(win_name, src_display, showCrosshair=True, fromCenter=False)
+        print(f"请在 [{win_name}] 中框选区域，按 SPACE/ENTER 确认。")
+        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+        roi_rect = cv2.selectROI(win_name, src_disp, showCrosshair=True, fromCenter=False)
         cv2.destroyWindow(win_name)
         
-        x_small, y_small, w_small, h_small = roi_rect
+        x_s, y_s, w_s, h_s = roi_rect
+        if w_s == 0 or h_s == 0: return None
         
-        if w_small == 0 or h_small == 0:
-            return None # 用户取消了
-        
-        # --- 新增逻辑：坐标映射回原图 ---
-        # 比如你在 0.5 倍的图上选了 100px，在原图其实是 200px
-        real_x = int(x_small / scale)
-        real_y = int(y_small / scale)
-        real_w = int(w_small / scale)
-        real_h = int(h_small / scale)
-        
-        # 返回原图的高清切片
-        return src[real_y : real_y + real_h, real_x : real_x + real_w]
+        real_x, real_y = int(x_s/scale), int(y_s/scale)
+        real_w, real_h = int(w_s/scale), int(h_s/scale)
+        return src[real_y:real_y+real_h, real_x:real_x+real_w]
 
-    def remove_black_background(self, roi):
-        """ 自动去除黑色背景 """
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        # 阈值策略：亮度(V)非常低的确认为背景
-        # 你可以根据实际情况调整这里的 60. 如果抠多了就调小，抠少了就调大
-        lower = np.array([0, 0, 0])
-        upper = np.array([180, 255, 60]) 
-        mask = cv2.inRange(hsv, lower, upper)
-        
-        # 反转：我们要非黑色的部分
-        mask_inv = cv2.bitwise_not(mask)
-        
-        # 简单平滑处理，去掉边缘锯齿
-        mask_inv = cv2.GaussianBlur(mask_inv, (3, 3), 0)
-        return roi, mask_inv
+    def match_background(self, roi):
+        """ (保持不变) 自动色差平衡 """
+        roi_bg_ref = np.mean(roi[0:20, 0:20], axis=(0, 1))
+        diff = self.bg_black_ref - roi_bg_ref
+        res = roi.astype(np.float32) + diff
+        return np.clip(res, 0, 255).astype(np.uint8)
 
-    def color_transfer(self, source_roi, source_mask):
-        """ 色彩迁移：让源物体的色调去匹配背景 """
-        # 计算背景的均值（排除纯黑区域）
-        bg_gray = cv2.cvtColor(self.bg, cv2.COLOR_BGR2GRAY)
-        bg_mean = cv2.mean(self.bg, mask=(bg_gray > 10).astype(np.uint8))[:3]
+    def interactive_place(self, inset_img):
+        """ 
+        >>> 游戏级交互模式 <<<
+        - 鼠标移动：控制位置
+        - 键盘 W/S：放大/缩小 (每次 1%)
+        - 鼠标左键：确认放置
+        """
+        # 初始缩放设为背景宽度的 35%
+        current_scale = (self.bg.shape[1] * 0.35) / inset_img.shape[1]
         
-        # 计算源物体的均值
-        src_mean = cv2.mean(source_roi, mask=source_mask)[:3]
+        # 状态变量
+        pos = [0, 0] # [x, y]
+        placed = False
         
-        # 简单的增益补偿: Target / Source
-        # 我们稍微降低一点亮度 (0.9)，通常会让拼贴更自然，不那么“跳”
-        gain = np.array(bg_mean) / (np.array(src_mean) + 1e-5) * 0.9
+        # 窗口设置
+        win_name = "WASD to Resize | Click to Confirm"
+        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
         
-        res = np.multiply(source_roi.astype(float), gain)
-        res = np.clip(res, 0, 255).astype(np.uint8)
-        return res
+        # 预计算显示缩放比例（为了在你的屏幕上能完整看到背景图）
+        screen_h = 900.0
+        bg_h, bg_w = self.bg.shape[:2]
+        disp_scale = screen_h / bg_h if bg_h > screen_h else 1.0
+        
+        # 鼠标回调：只更新位置坐标
+        def mouse_callback(event, x, y, flags, param):
+            nonlocal placed
+            # 映射回真实坐标
+            real_x = int(x / disp_scale)
+            real_y = int(y / disp_scale)
+            
+            if event == cv2.EVENT_MOUSEMOVE:
+                pos[0], pos[1] = real_x, real_y
+            elif event == cv2.EVENT_LBUTTONDOWN:
+                placed = True # 点击确认
 
-    def paste_interactive(self, element, mask, scale=1.0):
-        """ 交互式粘贴：点哪里贴哪里 """
-        # 1. 缩放
-        h, w = element.shape[:2]
-        new_w, new_h = int(w * scale), int(h * scale)
-        element_resized = cv2.resize(element, (new_w, new_h))
-        mask_resized = cv2.resize(mask, (new_w, new_h))
+        cv2.setMouseCallback(win_name, mouse_callback)
         
-        print("请在背景图上点击你想放置的位置 (点击后按任意键确认位置)...")
-        
-        # 定义鼠标回调函数来获取点击位置
-        click_pos = [0, 0]
-        def on_mouse(event, x, y, flags, param):
-            if event == cv2.EVENT_LBUTTONDOWN:
-                click_pos[0], click_pos[1] = x, y
-                print(f"选中位置: {x}, {y}")
+        print(">>> 进入调整模式：")
+        print("    [鼠标移动] 选择位置")
+        print("    [W / S] 放大 / 缩小")
+        print("    [鼠标左键] 确认并保存")
 
-        temp_bg = self.bg.copy()
-        win_name = "Click to Paste (Press Any Key to Confirm)"
-        cv2.namedWindow(win_name)
-        cv2.setMouseCallback(win_name, on_mouse)
-        
-        while True:
-            display = temp_bg.copy()
-            # 实时画个框显示大概位置
-            cv2.rectangle(display, (click_pos[0], click_pos[1]), 
-                          (click_pos[0]+new_w, click_pos[1]+new_h), (0, 255, 0), 2)
-            cv2.imshow(win_name, display)
-            if cv2.waitKey(20) & 0xFF != 255: # 按任意键退出
+        while not placed:
+            # 1. 根据当前 scale 计算插图大小
+            h_i, w_i = inset_img.shape[:2]
+            new_w, new_h = int(w_i * current_scale), int(h_i * current_scale)
+            inset_resized = cv2.resize(inset_img, (new_w, new_h))
+            
+            # 2. 在背景副本上绘制预览
+            # 为了性能，我们只在每一帧复制一次背景
+            preview = self.bg.copy()
+            
+            # 计算左上角坐标 (让鼠标位于插图中心)
+            top_x = pos[0] - new_w // 2
+            top_y = pos[1] - new_h // 2
+            
+            # 边界保护与绘制
+            # 只在图像范围内绘制有效区域
+            y1, y2 = max(0, top_y), min(bg_h, top_y + new_h)
+            x1, x2 = max(0, top_x), min(bg_w, top_x + new_w)
+            
+            # 对应的插图切片坐标
+            iy1, iy2 = y1 - top_y, y2 - top_y
+            ix1, ix2 = x1 - top_x, x2 - top_x
+            
+            if y2 > y1 and x2 > x1:
+                preview[y1:y2, x1:x2] = inset_resized[iy1:iy2, ix1:ix2]
+                # 画个绿框表示选中状态
+                cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            # 3. 显示 (缩放以适应屏幕)
+            disp_h, disp_w = int(bg_h * disp_scale), int(bg_w * disp_scale)
+            cv2.imshow(win_name, cv2.resize(preview, (disp_w, disp_h)))
+            
+            # 4. 键盘控制
+            key = cv2.waitKey(10) & 0xFF # 10ms 延迟，保证流畅
+            if key == ord('w'): # 放大
+                current_scale *= 1.02
+            elif key == ord('s'): # 缩小
+                current_scale *= 0.98
+            elif key == 27: # ESC 退出
                 break
+        
         cv2.destroyWindow(win_name)
         
-        # 开始融合
-        x, y = click_pos
-        # 边界保护
-        if y + new_h > self.bg.shape[0] or x + new_w > self.bg.shape[1]:
-            print("错误：位置超出边界，无法粘贴")
-            return
-
-        roi_bg = self.bg[y:y+new_h, x:x+new_w]
-        
-        # Mask融合算法
-        mask_3ch = cv2.merge([mask_resized, mask_resized, mask_resized])
-        # mask > 0 的地方用前景，否则用背景
-        result_roi = np.where(mask_3ch > 0, element_resized, roi_bg)
-        
-        self.bg[y:y+new_h, x:x+new_w] = result_roi
-        print("粘贴完成！")
+        # 5. 循环结束，执行最终的“烙印”
+        if placed:
+            h_i, w_i = inset_img.shape[:2]
+            new_w, new_h = int(w_i * current_scale), int(h_i * current_scale)
+            inset_final = cv2.resize(inset_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            
+            top_x = pos[0] - new_w // 2
+            top_y = pos[1] - new_h // 2
+            
+            y1, y2 = max(0, top_y), min(bg_h, top_y + new_h)
+            x1, x2 = max(0, top_x), min(bg_w, top_x + new_w)
+            iy1, iy2 = y1 - top_y, y2 - top_y
+            ix1, ix2 = x1 - top_x, x2 - top_x
+            
+            if y2 > y1 and x2 > x1:
+                self.bg[y1:y2, x1:x2] = inset_final[iy1:iy2, ix1:ix2]
+                print(f"成功放置！位置: {top_x}, {top_y}, 缩放: {current_scale:.2f}")
 
     def save(self):
         cv2.imwrite(OUTPUT_PATH, self.bg)
-        print(f"最终图片已保存至: {OUTPUT_PATH}")
+        print(f"全部完成: {OUTPUT_PATH}")
 
-# === 主流程 ===
+# === 主程序 ===
 if __name__ == "__main__":
-    processor = ImageProcessor(BG_PATH)
+    app = UltimatePaster(BG_PATH)
     
-    # 1. 处理豆荚
     print(">>> 步骤1: 提取豆荚")
-    pod_roi = processor.get_roi_interactive(POD_PATH, "Select POD (Draw a rect)")
-    if pod_roi is not None:
-        pod_roi, pod_mask = processor.remove_black_background(pod_roi)
-        pod_roi = processor.color_transfer(pod_roi, pod_mask)
-        # scale=0.8 表示缩放大小，你可以根据实际效果改这个数字
-        processor.paste_interactive(pod_roi, pod_mask, scale=1.0) 
-
-    # 2. 处理种子 (逻辑完全一样)
+    roi1 = app.get_roi_zoomed(POD_PATH, "Select POD")
+    if roi1 is not None:
+        roi1 = app.match_background(roi1)
+        app.interactive_place(roi1) # 进入游戏模式
+        
     print("\n>>> 步骤2: 提取种子")
-    seed_roi = processor.get_roi_interactive(SEED_PATH, "Select SEED")
-    if seed_roi is not None:
-        seed_roi, seed_mask = processor.remove_black_background(seed_roi)
-        seed_roi = processor.color_transfer(seed_roi, seed_mask)
-        processor.paste_interactive(seed_roi, seed_mask, scale=1.0)
-
-    # 3. 保存
-    processor.save()
+    roi2 = app.get_roi_zoomed(SEED_PATH, "Select SEED")
+    if roi2 is not None:
+        roi2 = app.match_background(roi2)
+        app.interactive_place(roi2) # 进入游戏模式
+        
+    app.save()
