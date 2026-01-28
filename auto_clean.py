@@ -29,7 +29,7 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     # 只检测非常白的区域（纯白色牌子）
     white_lower = np.array([0, 0, 220])  # 高亮度阈值
     white_upper = np.array([180, 40, 255])  # 低饱和度（接近纯白）
-    white_mask = cv2.inRange(hsv, white_lower, white_upper)
+    white_mask_raw = cv2.inRange(hsv, white_lower, white_upper)
     
     # ===== 方法2: 标尺检测 =====
     # 策略：从左边扫描，找到第一个主要的暗灰色竖直条纹
@@ -85,7 +85,7 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     
     # ===== 方法3: 连通域分析 - 找到大块的白色区域（牌子） =====
     # 对白色掩码进行连通域分析
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(white_mask, connectivity=8)
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(white_mask_raw, connectivity=8)
     
     connected_mask = np.zeros((h, w), dtype=np.uint8)
     print(f"找到 {num_labels-1} 个白色连通域")
@@ -112,8 +112,13 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
                 cv2.rectangle(connected_mask, (x1, y1), (x2, y2), 255, -1)
     
     # ===== 合并所有掩码 =====
-    mask = cv2.bitwise_or(white_mask, ruler_mask)
-    mask = cv2.bitwise_or(mask, connected_mask)
+    # Merge and expand white regions (signs)
+    white_mask = cv2.bitwise_or(white_mask_raw, connected_mask)
+    white_expand_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
+    white_mask_expanded = cv2.dilate(white_mask, white_expand_kernel, iterations=2)
+
+    # Merge all masks
+    mask = cv2.bitwise_or(white_mask_expanded, ruler_mask)
     
     # ===== 适度的形态学操作 =====
     # 使用适度的核进行闭操作
@@ -134,6 +139,7 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     
     # 保存掩码用于调试
     cv2.imwrite('images/mask_debug.png', mask)
+    cv2.imwrite('images/mask_white_expanded.png', white_mask_expanded)
     print("已保存掩码到 images/mask_debug.png 供调试")
     
     # 修复策略：多次inpaint + 边界平滑
@@ -146,6 +152,9 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     # 第二轮：Navier-Stokes修复
     print("第二轮修复（NS，radius=40）...")
     result = cv2.inpaint(result, mask, 40, cv2.INPAINT_NS)
+
+    # Extra pass for white signs with larger radius
+    result = cv2.inpaint(result, white_mask_expanded, 50, cv2.INPAINT_TELEA)
     
     # 第三轮：Telea细致修复
     print("第三轮修复（Telea，radius=35）...")

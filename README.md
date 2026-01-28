@@ -1,109 +1,143 @@
-# Soybean-Image-Processor
+﻿# Soybean-Image-Processor
 
-## 功能说明
+用于大豆（豆荚/种子）图像合成与背景清理的交互式小工具。核心流程是：
+1) 背景清理（可选，自动或手动）
+2) 选择豆荚区域并放置
+3) 选择种子区域并放置
+4) 输出合成结果
 
-本程序用于处理大豆图像，支持以下功能：
+## 功能概览
 
-### 步骤 0: 背景清理（新增）
-- **功能**: 使用鼠标交互式标记背景中需要移除的物体（如尺子、白色牌子等）
-- **操作**:
-  1. 程序加载 `bg.png` 并显示在窗口中
-  2. 使用鼠标左键拖拽绘制矩形，标记需要移除的区域
-  3. 可标记多个区域
-  4. 按 **SPACE** 确认标记，或按 **ESC** 取消
-- **原理**: 使用OpenCV的图像修复（inpainting）算法自动填补标记的区域
-- **输出**: 保存清理后的背景到 `images/bg_cleaned.png`
+- 背景清理
+  - 手动：鼠标框选需要移除的物体，OpenCV inpainting 修复
+  - 自动：检测白色物体与金属尺，自动修复
+- 交互式抠取与放置
+  - 从 `pod.jpg`、`seed.jpg` 选择区域
+  - 鼠标移动调整位置，滚轮缩放，左键确认
+- 背景色差自动匹配（前景与背景色差补偿）
 
-### 步骤 1: 豆荚提取与放置
-- 从 `pod.jpg` 中选择感兴趣的区域
-- 交互式调整位置和大小
-- 自动色差匹配
+## 目录结构
 
-### 步骤 2: 种子提取与放置  
-- 从 `seed.jpg` 中选择感兴趣的区域
-- 交互式调整位置和大小
-- 自动色差匹配
+```
+.
+├─ images/
+│  ├─ bg.png            # 原始背景
+│  ├─ bg_cleaned.png    # 清理后的背景（自动生成）
+│  ├─ pod.jpg           # 豆荚图
+│  └─ seed.jpg          # 种子图
+├─ main.py              # 主流程（交互式）
+├─ auto_clean.py        # 自动清理背景（可选）
+├─ compare_bg.py        # 清理前后对比
+├─ CLEANING_GUIDE.md    # 清理算法与调参说明
+├─ IMPROVEMENTS.md      # 功能改进记录
+└─ README.md
+```
 
-## 交互操作
+## 环境依赖
 
-### 背景清理窗口
-- **鼠标左键拖拽**: 绘制矩形标记需要移除的区域
-- **SPACE**: 确认标记，开始修复
-- **ESC**: 取消操作
+- Python 3.8+
+- 依赖包：opencv-python, numpy
 
-### 区域选择窗口（豆荚/种子）
-- **鼠标拖拽**: 选择感兴趣区域
-- **SPACE/ENTER**: 确认选择
+安装示例：
 
-### 位置调整窗口
-- **鼠标移动**: 调整位置
-- **鼠标滚轮**: 放大/缩小（每次 5%）
-- **鼠标左键**: 确认并保存
+```bash
+pip install opencv-python numpy
+```
 
-## 使用方式
+## 快速开始（推荐流程）
 
-### 方式1：主程序（推荐）
+1) 自动清理背景（生成 `images/bg_cleaned.png`）
+
+```bash
+python auto_clean.py
+```
+
+2) 运行主程序进行抠取与放置
+
 ```bash
 python main.py
 ```
 
-程序执行步骤：
-1. **背景清理（可选）**
-   - 如果 `images/bg_cleaned.png` 存在，询问是否使用预清理背景
-   - 否则询问是否现在清理原始背景
-   - 需要用户交互式标记需要移除的区域
+3) 可选：查看清理前后对比图
 
-2. **豆荚提取与放置**
-   - 选择感兴趣的区域
-   - 交互式调整位置和大小
-
-3. **种子提取与放置**
-   - 选择感兴趣的区域
-   - 交互式调整位置和大小
-
-4. **保存结果** → `result_final_v4.jpg`
-
-### 方式2：自动清理背景（预处理）
-```bash
-# 自动检测并移除白色对象和金属尺子
-python auto_clean.py
-
-# 手动模式：显示检测结果供用户确认
-python auto_clean.py --manual
-```
-
-这样会生成 `images/bg_cleaned.png`，然后运行 `python main.py` 时可直接使用
-
-### 方式3：查看清理效果对比
 ```bash
 python compare_bg.py
 ```
 
-显示原始背景和清理后背景的并排对比，方便评估清理效果
+## 使用说明
 
-## 技术特点
+### 主程序：`python main.py`
 
-- **智能修复**: 使用Telea算法进行高质量的图像修复
-- **自动检测**: 可自动识别白色区域和金属尺子
-- **手动微调**: 交互式标记，精确控制需要移除的区域
-- **色彩匹配**: 自动匹配前景与背景的色彩，使合成更自然
-- **交互式调整**: 实时预览，用户可精确控制位置和大小
-- **高分辨率支持**: 支持大尺寸图像处理（4624x3472px）
+运行后流程如下：
 
-## 推荐工作流程
+1. 若检测到 `images/bg_cleaned.png`，会询问是否使用清理后的背景
+2. 若不使用清理背景，会询问是否进行手动清理
+3. 依次选择豆荚与种子区域并放置
+4. 输出合成结果：`result_final_v4.jpg`
 
-1. **第一次运行**
-   ```bash
-   python auto_clean.py  # 自动清理背景
-   python main.py        # 使用清理后的背景进行合成
-   ```
+#### 交互说明
 
-2. **后续运行**
-   ```bash
-   python main.py        # 直接使用预清理的背景
-   ```
+- 背景清理窗口
+  - 鼠标左键拖拽：画矩形标记需要移除的区域
+  - `SPACE`：确认并开始修复
+  - `ESC`：取消
+- 区域选择窗口（豆荚/种子）
+  - 鼠标拖拽：选择区域
+  - `SPACE` / `ENTER`：确认
+- 位置调整窗口
+  - 鼠标移动：调整位置
+  - 鼠标滚轮：缩放（每次 5%）
+  - 鼠标左键：确认并保存位置
+  - `ESC`：退出不放置
 
-3. **如需重新清理**
-   ```bash
-   rm images/bg_cleaned.png  # 删除预清理的背景
-   python main.py            # 程序会询问是否清理
+### 自动清理：`python auto_clean.py`
+
+自动识别白色物体与金属尺，并进行多轮 inpainting 修复。
+
+手动预览模式：
+
+```bash
+python auto_clean.py --manual
+```
+
+会显示检测区域预览，确认后执行修复。
+
+### 清理对比：`python compare_bg.py`
+
+将原始与清理后的背景并排显示，并输出对比图 `bg_comparison.jpg`。
+
+## 输出文件
+
+- `images/bg_cleaned.png`：清理后的背景（自动生成）
+- `result_final_v4.jpg`：最终合成结果
+- `bg_comparison.jpg`：清理前后对比图
+- `images/mask_debug.png`：自动清理时的掩码调试图
+
+## 配置入口
+
+主流程的路径配置在 `main.py` 顶部：
+
+```python
+BG_PATH = 'images/bg.png'
+POD_PATH = 'images/pod.jpg'
+SEED_PATH = 'images/seed.jpg'
+OUTPUT_PATH = 'result_final_v4.jpg'
+BG_CLEANED_PATH = 'images/bg_cleaned.png'
+```
+
+自动清理参数与调参建议请参考 `CLEANING_GUIDE.md`。
+
+## 常见问题
+
+- 找不到图片
+  - 请确认 `images/` 下存在 `bg.png`、`pod.jpg`、`seed.jpg`
+- 自动清理不理想
+  - 尝试 `python auto_clean.py --manual` 先预览
+  - 参考 `CLEANING_GUIDE.md` 调整阈值和 inpaint 半径
+- 窗口显示过大/过小
+  - 程序会按 900px 高度缩放显示，实际处理为原图尺寸
+
+## 相关文档
+
+- `CLEANING_GUIDE.md`：清理算法、调参和排错说明
+- `IMPROVEMENTS.md`：功能改进摘要
