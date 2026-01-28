@@ -136,20 +136,24 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     cv2.imwrite('images/mask_debug.png', mask)
     print("已保存掩码到 images/mask_debug.png 供调试")
     
-    # 多轮强力修复以获得更好效果
+    # 修复策略：多次inpaint + 边界平滑
     result = bg.copy()
     
-    # 第一轮：Telea算法，较大的radius
-    print("第一轮修复（Telea算法，radius=25）...")
-    result = cv2.inpaint(result, mask, 25, cv2.INPAINT_TELEA)
+    # 第一轮：大radius的Telea修复
+    print("第一轮修复（Telea，radius=40）...")
+    result = cv2.inpaint(result, mask, 40, cv2.INPAINT_TELEA)
     
-    # 第二轮：Navier-Stokes算法
-    print("第二轮修复（Navier-Stokes算法，radius=25）...")
-    result = cv2.inpaint(result, mask, 25, cv2.INPAINT_NS)
+    # 第二轮：Navier-Stokes修复
+    print("第二轮修复（NS，radius=40）...")
+    result = cv2.inpaint(result, mask, 40, cv2.INPAINT_NS)
     
-    # 第三轮：再用Telea优化边界
-    print("第三轮修复（Telea算法，radius=20）...")
-    result = cv2.inpaint(result, mask, 20, cv2.INPAINT_TELEA)
+    # 第三轮：Telea细致修复
+    print("第三轮修复（Telea，radius=35）...")
+    result = cv2.inpaint(result, mask, 35, cv2.INPAINT_TELEA)
+    
+    # 第四轮：使用双边滤波平滑修复区域
+    print("应用边界平滑...")
+    result = cv2.bilateralFilter(result, 9, 75, 75)
     
     # 保存结果
     cv2.imwrite(output_path, result)
