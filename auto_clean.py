@@ -36,39 +36,41 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     gray = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY)
     
     ruler_mask = np.zeros((h, w), dtype=np.uint8)
-    
-    # 检测非常暗的灰色（10-30，标尺的核心颜色）
+
+    # Ruler detection (single ruler on the left, vertical) 
     gray_dark = cv2.inRange(gray, 10, 30)
-    
-    # 计算每列的很暗像素数
     col_count = np.sum(gray_dark, axis=0)
-    
-    # 找第一个有大量很暗像素的列（标尺应该在左侧且很暗）
-    # 要求至少有50%的列像素是这么暗
-    threshold = h * 0.5
-    
+    dark_frac = col_count / float(h)
+
+    left_limit = int(w * 0.35)
+    min_dark_frac = 0.8
+    min_width = max(5, int(w * 0.005))
+    max_width = int(w * 0.12)
+
+    best = None  # (start, end, score)
+    col = 0
+    while col < left_limit:
+        if dark_frac[col] >= min_dark_frac:
+            s = col
+            while col < left_limit and dark_frac[col] >= min_dark_frac:
+                col += 1
+            e = col - 1
+            width = e - s + 1
+            if min_width <= width <= max_width:
+                score = dark_frac[s:e+1].mean()
+                if best is None or score > best[2]:
+                    best = (s, e, score)
+        else:
+            col += 1
+
     ruler_col = -1
     ruler_width = 0
-    
-    for col in range(w // 2):  # 只在左半部分找
-        if col_count[col] > threshold:
-            start_col = col
-            end_col = col
-            
-            # 向右扩展，直到很暗像素数明显下降
-            while end_col < w - 1 and col_count[end_col + 1] > threshold * 0.5:
-                end_col += 1
-            
-            ruler_col = start_col
-            ruler_width = end_col - start_col + 1
-            
-            # 宽度必须合理（<150）
-            if ruler_width < 150:
-                print(f"找到标尺：从列 {start_col} 到 {end_col}，宽度 {ruler_width}")
-                break
-            else:
-                print(f"跳过：宽度 {ruler_width} 太大")
-    
+    if best is not None:
+        ruler_col, end_col, score = best
+        ruler_width = end_col - ruler_col + 1
+        print(f"Ruler candidate: {ruler_col}-{end_col}, width={ruler_width}, dark={score:.2f}")
+    else:
+        print("No ruler candidate matched constraints")
     if ruler_col >= 0 and ruler_width > 0 and ruler_width < 300:
         # 添加到掩码
         ruler_mask[:, ruler_col:ruler_col + ruler_width] = 255
