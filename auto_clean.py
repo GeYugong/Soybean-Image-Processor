@@ -67,7 +67,7 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
 
     if ruler_col >= 0 and ruler_width > 0 and ruler_width < 300:
         ruler_mask[:, ruler_col:ruler_col + ruler_width] = 255
-        expand = 80
+        expand = 190
         x1 = max(0, ruler_col - expand)
         x2 = min(w, ruler_col + ruler_width + expand)
         ruler_mask[:, x1:x2] = 255
@@ -130,20 +130,17 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     print("Single-pass inpaint (Telea, radius=40)...")
     result = cv2.inpaint(result, mask, 40, cv2.INPAINT_TELEA)
 
-    # Ruler: fill with nearby right-side background color (row-wise)
+    # Ruler: replace with a single background color sample (simple & complete)
     if np.any(ruler_mask > 0):
         ys, xs = np.where(ruler_mask > 0)
         x1, x2 = xs.min(), xs.max()
         ref_start = min(w - 1, x2 + 5)
         ref_end = min(w, x2 + 55)
-        if ref_end > ref_start:
-            for y in range(h):
-                row_ref = bg[y, ref_start:ref_end]
-                if row_ref.size > 0:
-                    result[y, x1:x2 + 1] = np.mean(row_ref, axis=0).astype(np.uint8)
-        else:
-            bg_ref = np.mean(bg[0:50, max(0, w - 50):w], axis=(0, 1)).astype(np.uint8)
-            result[ruler_mask > 0] = bg_ref
+        if ref_end <= ref_start:
+            ref_start = max(0, w - 50)
+            ref_end = w
+        bg_ref = np.mean(bg[:, ref_start:ref_end], axis=(0, 1)).astype(np.uint8)
+        result[ruler_mask > 0] = bg_ref
 
     cv2.imwrite(output_path, result)
     print(f"Done. Saved to: {output_path}")
