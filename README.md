@@ -1,6 +1,6 @@
 ﻿# Soybean-Image-Processor
 
-用于大豆（豆荚/种子）图像合成与背景清理的交互式小工具。核心流程是：
+用于大豆（豆荚/种子）图像合成与背景清理的交互式小工具。核心流程：
 1) 背景清理（可选，自动或手动）
 2) 选择豆荚区域并放置
 3) 选择种子区域并放置
@@ -10,7 +10,9 @@
 
 - 背景清理
   - 手动：鼠标框选需要移除的物体，OpenCV inpainting 修复
-  - 自动：检测白色物体与金属尺，自动修复
+  - 自动：检测白色牌子 + 标尺
+    - 白色牌子：单轮 inpaint
+    - 标尺：直接裁掉（从标尺右边往右保留）
 - 交互式抠取与放置
   - 从 `pod.jpg`、`seed.jpg` 选择区域
   - 鼠标移动调整位置，滚轮缩放，左键确认
@@ -92,7 +94,9 @@ python compare_bg.py
 
 ### 自动清理：`python auto_clean.py`
 
-自动识别白色物体与金属尺，并进行多轮 inpainting 修复。
+当前自动清理策略：
+- **白色牌子**：单轮 inpaint 修复
+- **标尺**：直接裁掉（从标尺右边往右保留）
 
 手动预览模式：
 
@@ -112,6 +116,12 @@ python auto_clean.py --manual
 - `result_final_v4.jpg`：最终合成结果
 - `bg_comparison.jpg`：清理前后对比图
 - `images/mask_debug.png`：自动清理时的掩码调试图
+- `images/mask_white_expanded.png`：白色牌子扩张掩码（调试）
+
+## 注意事项
+
+- **自动清理会裁剪图像宽度**：标尺右边保留，左侧全部裁掉。
+- 若裁剪过多/过少，可调整 `auto_clean.py` 中的 `crop_pad` 或标尺检测阈值。
 
 ## 配置入口
 
@@ -133,7 +143,7 @@ BG_CLEANED_PATH = 'images/bg_cleaned.png'
   - 请确认 `images/` 下存在 `bg.png`、`pod.jpg`、`seed.jpg`
 - 自动清理不理想
   - 尝试 `python auto_clean.py --manual` 先预览
-  - 参考 `CLEANING_GUIDE.md` 调整阈值和 inpaint 半径
+  - 参考 `CLEANING_GUIDE.md` 调整阈值
 - 窗口显示过大/过小
   - 程序会按 900px 高度缩放显示，实际处理为原图尺寸
 

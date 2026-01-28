@@ -130,17 +130,14 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     print("Single-pass inpaint (Telea, radius=40)...")
     result = cv2.inpaint(result, mask, 40, cv2.INPAINT_TELEA)
 
-    # Ruler: replace with a single background color sample (simple & complete)
+    # Ruler: crop away everything to the left of the ruler's right edge
     if np.any(ruler_mask > 0):
-        ys, xs = np.where(ruler_mask > 0)
-        x1, x2 = xs.min(), xs.max()
-        ref_start = min(w - 1, x2 + 5)
-        ref_end = min(w, x2 + 55)
-        if ref_end <= ref_start:
-            ref_start = max(0, w - 50)
-            ref_end = w
-        bg_ref = np.mean(bg[:, ref_start:ref_end], axis=(0, 1)).astype(np.uint8)
-        result[ruler_mask > 0] = bg_ref
+        _, xs = np.where(ruler_mask > 0)
+        x2 = xs.max()
+        crop_pad = 10
+        crop_start = min(result.shape[1], x2 + 1 + crop_pad)
+        if crop_start < result.shape[1]:
+            result = result[:, crop_start:]
 
     cv2.imwrite(output_path, result)
     print(f"Done. Saved to: {output_path}")
