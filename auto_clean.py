@@ -92,30 +92,40 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     connected_mask = np.zeros((h, w), dtype=np.uint8)
     print(f"找到 {num_labels-1} 个白色连通域")
     
-    for i in range(1, num_labels):  # 跳过背景(0)
+    # ??????????????????????
+    best = None  # (area, x, y, w, h)
+    for i in range(1, num_labels):  # ????(0)
         area = stats[i, cv2.CC_STAT_AREA]
-        # 白色牌子应该有较大面积
-        if area > 500:  # 提高阈值，只保留大块白色区域
+        if area > 500:
             x = stats[i, cv2.CC_STAT_LEFT]
             y = stats[i, cv2.CC_STAT_TOP]
             w_comp = stats[i, cv2.CC_STAT_WIDTH]
             h_comp = stats[i, cv2.CC_STAT_HEIGHT]
-            
-            # 检查是否接近正方形或矩形（牌子的特征）
             aspect = max(w_comp, h_comp) / (min(w_comp, h_comp) + 1)
-            if aspect < 5:  # 不能太细长
-                # 适度扩展区域
-                expand = 10
-                x1 = max(0, x - expand)
-                y1 = max(0, y - expand)
-                x2 = min(w, x + w_comp + expand)
-                y2 = min(h, y + h_comp + expand)
-                
-                cv2.rectangle(connected_mask, (x1, y1), (x2, y2), 255, -1)
-    
-    # ===== 合并所有掩码 =====
+            if aspect < 5:
+                if best is None or area > best[0]:
+                    best = (area, x, y, w_comp, h_comp)
+
+    if best is not None:
+        _, x, y, w_comp, h_comp = best
+        expand = 10
+        x1 = max(0, x - expand)
+        y1 = max(0, y - expand)
+        x2 = min(w, x + w_comp + expand)
+        y2 = min(h, y + h_comp + expand)
+        cv2.rectangle(connected_mask, (x1, y1), (x2, y2), 255, -1)
+
+    # Merge and expand white regions (signs)
     # Merge and expand white regions (signs)
     white_mask = cv2.bitwise_or(white_mask_raw, connected_mask)
+    white_expand_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
+    white_mask_expanded = cv2.dilate(white_mask, white_expand_kernel, iterations=2)
+
+    # Debug mask should include both white sign + ruler
+    mask_all = cv2.bitwise_or(white_mask_expanded, ruler_mask)
+
+    # Inpainting mask only for white sign
+    mask = white_mask_expanded
     white_expand_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
     white_mask_expanded = cv2.dilate(white_mask, white_expand_kernel, iterations=2)
 
@@ -140,7 +150,7 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     print(f"检测到 {pixel_count} 个像素需要修复（{pixel_count/(h*w)*100:.2f}%），正在进行修复...")
     
     # 保存掩码用于调试
-    cv2.imwrite('images/mask_debug.png', mask)
+    cv2.imwrite('images/mask_debug.png', mask_all)
     cv2.imwrite('images/mask_white_expanded.png', white_mask_expanded)
     print("已保存掩码到 images/mask_debug.png 供调试")
     
@@ -161,6 +171,11 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     # 第三轮：Telea细致修复
     print("第三轮修复（Telea，radius=35）...")
     result = cv2.inpaint(result, mask, 35, cv2.INPAINT_TELEA)
+
+    # ????????????????inpaint?
+    if np.any(ruler_mask > 0):
+        bg_ref = np.mean(bg[0:50, max(0, w-50):w], axis=(0, 1)).astype(np.uint8)
+        result[ruler_mask > 0] = bg_ref
     
     # 第四轮：使用双边滤波平滑修复区域
     print("应用边界平滑...")
