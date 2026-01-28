@@ -31,73 +31,57 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     white_upper = np.array([180, 40, 255])  # 低饱和度（接近纯白）
     white_mask = cv2.inRange(hsv, white_lower, white_upper)
     
-    # ===== 方法2: 基于形状和直线的标尺检测（不依赖颜色） =====
-    # 标尺特征：非常细长的直线，通常在图像边缘
+    # ===== 方法2: 标尺检测 =====
+    # 策略：从左边扫描，找到第一个主要的暗灰色竖直条纹
     gray = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY)
-    
-    # 使用Canny边缘检测
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    edges = cv2.Canny(blurred, 50, 150)
-    
-    # 使用Hough直线变换检测长直线（标尺的特征）
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, 50, minLineLength=500, maxLineGap=20)
     
     ruler_mask = np.zeros((h, w), dtype=np.uint8)
     
-    if lines is not None:
-        print(f"检测到 {len(lines)} 条直线")
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
-            
-            # 计算直线的长度和角度
-            length = np.sqrt((x2-x1)**2 + (y2-y1)**2)
-            
-            # 计算是否是水平或垂直线（标尺通常是直的）
-            dx = abs(x2 - x1)
-            dy = abs(y2 - y1)
-            
-            if dx > dy:  # 水平线
-                angle_to_straight = dy / (dx + 1)
-            else:  # 垂直线
-                angle_to_straight = dx / (dy + 1)
-            
-            is_near_straight = angle_to_straight < 0.1  # 几乎水平或垂直
-            is_long_enough = length > 300  # 足够长
-            
-            if is_near_straight and is_long_enough:
-                # 线条宽度膨胀（标尺有宽度）
-                pt1 = (x1, y1)
-                pt2 = (x2, y2)
-                cv2.line(ruler_mask, pt1, pt2, 255, 20)  # 20像素宽
+    # 检测非常暗的灰色（10-30，标尺的核心颜色）
+    gray_dark = cv2.inRange(gray, 10, 30)
     
-    # 补充：轮廓分析找极端细长的物体
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # 计算每列的很暗像素数
+    col_count = np.sum(gray_dark, axis=0)
     
-    print(f"找到 {len(contours)} 个轮廓，正在筛选标尺...")
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        # 只看极细长的轮廓（与植株区分）
-        if 300 < area < 100000:  # 合理的面积范围
-            x, y, cw, ch = cv2.boundingRect(contour)
+    # 找第一个有大量很暗像素的列（标尺应该在左侧且很暗）
+    # 要求至少有50%的列像素是这么暗
+    threshold = h * 0.5
+    
+    ruler_col = -1
+    ruler_width = 0
+    
+    for col in range(w // 2):  # 只在左半部分找
+        if col_count[col] > threshold:
+            start_col = col
+            end_col = col
             
-            # 计算纵横比
-            aspect_ratio = max(cw, ch) / (min(cw, ch) + 1)
+            # 向右扩展，直到很暗像素数明显下降
+            while end_col < w - 1 and col_count[end_col + 1] > threshold * 0.5:
+                end_col += 1
             
-            # 标尺必须非常细长（至少20:1）
-            if aspect_ratio > 20:
-                # 检查是否靠近边缘（标尺通常在边缘）
-                margin = 150
-                is_near_edge = (x < margin or y < margin or 
-                               x + cw > w - margin or y + ch > h - margin)
-                
-                if is_near_edge:
-                    # 有一定膨胀空间来确保完全覆盖
-                    expand = 8
-                    x1 = max(0, x - expand)
-                    y1 = max(0, y - expand)
-                    x2 = min(w, x + cw + expand)
-                    y2 = min(h, y + ch + expand)
-                    cv2.rectangle(ruler_mask, (x1, y1), (x2, y2), 255, -1)
+            ruler_col = start_col
+            ruler_width = end_col - start_col + 1
+            
+            # 宽度必须合理（<150）
+            if ruler_width < 150:
+                print(f"找到标尺：从列 {start_col} 到 {end_col}，宽度 {ruler_width}")
+                break
+            else:
+                print(f"跳过：宽度 {ruler_width} 太大")
+    
+    if ruler_col >= 0 and ruler_width > 0 and ruler_width < 300:
+        # 添加到掩码
+        ruler_mask[:, ruler_col:ruler_col + ruler_width] = 255
+        
+        # 大幅膨胀确保完全覆盖标尺及其阴影
+        expand = 80  # 大幅增加膨胀范围
+        x1 = max(0, ruler_col - expand)
+        x2 = min(w, ruler_col + ruler_width + expand)
+        ruler_mask[:, x1:x2] = 255
+        
+        print(f"标尺掩码已设置：列 {x1}-{x2}")
+    else:
+        print(f"标尺未找到或宽度不合理：col={ruler_col}, width={ruler_width}")
     
     # ===== 方法3: 连通域分析 - 找到大块的白色区域（牌子） =====
     # 对白色掩码进行连通域分析
@@ -129,7 +113,6 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     
     # ===== 合并所有掩码 =====
     mask = cv2.bitwise_or(white_mask, ruler_mask)
-    mask = cv2.bitwise_or(mask, gray_mask)
     mask = cv2.bitwise_or(mask, connected_mask)
     
     # ===== 适度的形态学操作 =====
