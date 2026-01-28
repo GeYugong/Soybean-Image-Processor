@@ -28,8 +28,8 @@
 │  ├─ pod.jpg           # 豆荚图
 │  └─ seed.jpg          # 种子图
 ├─ main.py              # 主流程（交互式）
-├─ auto_clean.py        # 自动清理背景（可选）
-├─ compare_bg.py        # 清理前后对比
+├─ auto_clean.py        # 自动清理背景
+├─ compare_bg.py        # 清理前后对比(可视化辅助)
 ├─ CLEANING_GUIDE.md    # 清理算法与调参说明
 ├─ IMPROVEMENTS.md      # 功能改进记录
 └─ README.md
