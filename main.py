@@ -6,6 +6,7 @@ BG_PATH = 'images/bg.png'
 POD_PATH = 'images/pod.jpg'    
 SEED_PATH = 'images/seed.jpg'  
 OUTPUT_PATH = 'result_final_v4.jpg'
+BG_CLEANED_PATH = 'images/bg_cleaned.png'  # 清理后的背景
 
 class UltimatePaster:
     def __init__(self, bg_path):
@@ -14,6 +15,103 @@ class UltimatePaster:
             raise FileNotFoundError(f"找不到背景图: {bg_path}")
         # 计算背景基准值 (左上角)
         self.bg_black_ref = np.mean(self.bg[0:50, 0:50], axis=(0, 1))
+
+    def clean_background(self):
+        """
+        清理背景图：移除尺子和白色牌子
+        用户可交互式地标记需要移除的区域，使用inpainting技术修复
+        """
+        print(">>> 清理背景图：标记需要移除的区域")
+        print("按照以下步骤操作：")
+        print("1. 在显示的图像上标记尺子和白色牌子的位置（可标记多个）")
+        print("2. 标记完成后，程序会自动修复这些区域")
+        
+        # 创建工作副本
+        bg_work = self.bg.copy()
+        mask = np.zeros(bg_work.shape[:2], dtype=np.uint8)
+        
+        # 设置显示缩放
+        screen_h = 900.0
+        bg_h, bg_w = bg_work.shape[:2]
+        disp_scale = screen_h / bg_h if bg_h > screen_h else 1.0
+        
+        rects = []  # 存储用户标记的矩形
+        drawing = False
+        rect_start = None
+        
+        def mouse_callback(event, x, y, flags, param):
+            nonlocal drawing, rect_start, rects
+            
+            # 映射回真实坐标
+            real_x = int(x / disp_scale)
+            real_y = int(y / disp_scale)
+            
+            if event == cv2.EVENT_LBUTTONDOWN:
+                drawing = True
+                rect_start = (real_x, real_y)
+                
+            elif event == cv2.EVENT_LBUTTONUP:
+                if drawing and rect_start:
+                    drawing = False
+                    # 确保坐标正确排列
+                    x1, y1 = rect_start
+                    x2, y2 = real_x, real_y
+                    x1, x2 = min(x1, x2), max(x1, x2)
+                    y1, y2 = min(y1, y2), max(y1, y2)
+                    
+                    rects.append((x1, y1, x2, y2))
+                    # 在mask上标记该区域
+                    cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
+                    print(f"已标记区域: ({x1}, {y1}) -> ({x2}, {y2})")
+        
+        win_name = "Clean Background - Draw rectangles | SPACE to confirm | ESC to cancel"
+        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+        cv2.setMouseCallback(win_name, mouse_callback)
+        
+        # 显示预览直到用户确认
+        while True:
+            preview = bg_work.copy()
+            
+            # 绘制已标记的矩形
+            for x1, y1, x2, y2 in rects:
+                cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                cv2.putText(preview, 'Remove', (x1, y1-10), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+            
+            # 显示缩放版本
+            disp_h, disp_w = int(bg_h * disp_scale), int(bg_w * disp_scale)
+            preview_disp = cv2.resize(preview, (disp_w, disp_h))
+            cv2.imshow(win_name, preview_disp)
+            
+            key = cv2.waitKey(10) & 0xFF
+            if key == 32:  # SPACE 确认
+                break
+            elif key == 27:  # ESC 取消
+                cv2.destroyWindow(win_name)
+                print("已取消背景清理")
+                return False
+        
+        cv2.destroyWindow(win_name)
+        
+        # 如果没有标记任何区域，直接返回
+        if len(rects) == 0:
+            print("未标记任何区域，跳过清理")
+            return False
+        
+        # 使用 Telea 或 Navier-Stokes 算法进行inpainting修复
+        print(f"正在修复 {len(rects)} 个区域...")
+        
+        # 使用多次迭代的Telea算法进行修复
+        self.bg = cv2.inpaint(bg_work, mask, 5, cv2.INPAINT_TELEA)
+        
+        # 保存清理后的背景
+        cv2.imwrite(BG_CLEANED_PATH, self.bg)
+        print(f"清理完成，已保存清理后的背景: {BG_CLEANED_PATH}")
+        
+        # 重新计算背景基准值
+        self.bg_black_ref = np.mean(self.bg[0:50, 0:50], axis=(0, 1))
+        
+        return True
 
     def get_roi_zoomed(self, img_path, win_name="Select Region"):
         """ (保持不变) 高清切片提取 """
@@ -159,9 +257,31 @@ class UltimatePaster:
 
 # === 主程序 ===
 if __name__ == "__main__":
-    app = UltimatePaster(BG_PATH)
+    import os
+    import sys
     
-    print(">>> 步骤1: 提取豆荚")
+    # 检查是否存在预清理的背景
+    use_cleaned = False
+    if os.path.exists(BG_CLEANED_PATH):
+        print(f"检测到清理后的背景: {BG_CLEANED_PATH}")
+        response = input("是否使用预清理的背景？(y/n, 默认y): ").strip().lower()
+        use_cleaned = response != 'n'
+    
+    # 加载背景
+    if use_cleaned:
+        print(f"使用清理后的背景: {BG_CLEANED_PATH}")
+        app = UltimatePaster(BG_CLEANED_PATH)
+    else:
+        print(f"使用原始背景: {BG_PATH}")
+        app = UltimatePaster(BG_PATH)
+        
+        # 询问是否进行清理
+        response = input("是否现在清理背景？(y/n, 默认y): ").strip().lower()
+        if response != 'n':
+            print("\n>>> 步骤0: 清理背景图（移除尺子和白色牌子）")
+            app.clean_background()
+    
+    print("\n>>> 步骤1: 提取豆荚")
     roi1 = app.get_roi_zoomed(POD_PATH, "Select POD")
     if roi1 is not None:
         roi1 = app.match_background(roi1)
