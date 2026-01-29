@@ -1,5 +1,13 @@
-﻿import argparse
+"""
+大豆图像处理工具 - 单文件版本
+将 main.py 和 batch_process.py 合并，确保打包后正常工作
+"""
+
+import argparse
 import os
+import re
+import sys
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -12,6 +20,9 @@ OUTPUT_PATH = 'result_final_v4.jpg'
 BG_CLEANED_PATH = 'images/bg_cleaned.png'
 
 
+# ==========================================
+# UltimatePaster 类 (来自 main.py)
+# ==========================================
 class UltimatePaster:
     def __init__(self, bg_path):
         self.bg = cv2.imread(bg_path)
@@ -68,7 +79,6 @@ class UltimatePaster:
                         print(f"标记区域: ({x1}, {y1}) -> ({x2}, {y2})")
                 elif event == cv2.EVENT_RBUTTONDOWN:
                     if drawing:
-                        # cancel current drawing
                         drawing = False
                         rect_start = None
                         current_pos = None
@@ -142,7 +152,7 @@ class UltimatePaster:
             if skip_more:
                 break
 
-        # Optional crop after finishing all background edits
+        # Optional crop
         crop_x = None
         current_x = None
 
@@ -176,11 +186,10 @@ class UltimatePaster:
                 current_x = None
                 print("已重做当前步骤")
                 continue
-            if key in (ord('s'), ord('S'), 27):  # skip or exit
+            if key in (ord('s'), ord('S'), 27):
                 crop_x = None
                 break
             if crop_x is not None:
-                # Confirm crop after click
                 break
 
         cv2.destroyWindow(crop_win)
@@ -244,7 +253,7 @@ class UltimatePaster:
         return np.clip(res, 0, 255).astype(np.uint8)
 
     def select_color_reference(self):
-        print("请在背景图中框选一块“植株颜色”区域（SPACE/ENTER确认，R 重做，S 跳过，ESC 退出）")
+        print("请在背景图中框选一块植株颜色区域（SPACE/ENTER确认，R 重做，S 跳过，ESC 退出）")
         src = self.bg.copy()
         h, w = src.shape[:2]
         target_h = 900.0
@@ -461,97 +470,160 @@ class UltimatePaster:
 
 
 # ==========================================
-# 关键改动：将执行逻辑封装为 run_task 函数
+# 单组处理函数
 # ==========================================
-def run_task(args_list=None):
-    """
-    执行图像处理任务
-    args_list: 参数列表，用于程序化调用（如batch_process）
-    """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--bg", help="背景图像路径")
-    parser.add_argument("--pod", help="豆荚图像路径")
-    parser.add_argument("--seed", help="种子图像路径")
-    parser.add_argument("--out", help="输出图像路径")
-    parser.add_argument("--cleaned", help="使用已清理的背景路径 (跳过提示)")
-    parser.add_argument("--clean-bg", action="store_true", help="强制手动清理背景")
-    parser.add_argument("--cleaned-out", help="将清理后的背景保存到此路径")
-    parser.add_argument("--skip-clean", action="store_true", help="跳过手动清理背景提示")
-    
-    # 允许传入参数列表，这对 exe 调用至关重要
-    args = parser.parse_args(args_list)
-
-    batch_mode = any([args.bg, args.pod, args.seed, args.out, args.cleaned, args.clean_bg, args.cleaned_out, args.skip_clean])
-
-    if batch_mode:
-        bg_path = args.cleaned or args.bg or BG_PATH
-        pod_path = args.pod or POD_PATH
-        seed_path = args.seed or SEED_PATH
-        output_path = args.out or OUTPUT_PATH
-
-        app = UltimatePaster(bg_path)
-        if args.clean_bg:
-            app.clean_background(args.cleaned_out)
-        
-        # 批处理模式下也要保留颜色参考功能
-        app.select_color_reference()
-
-        print("\n>>> 第一步: 选择豆荚")
-        roi1 = app.get_roi_zoomed(pod_path, "Select Pod")
-        if roi1 is not None:
-            roi1 = app.match_background(roi1)
-            roi1 = app.auto_mask_object(roi1)
-            app.interactive_place(roi1)
-
-        print("\n>>> 第二步: 选择种子")
-        roi2 = app.get_roi_zoomed(seed_path, "Select Seed")
-        if roi2 is not None:
-            roi2 = app.match_background(roi2)
-            roi2 = app.auto_mask_object(roi2, keep_top_k=2)
-            app.interactive_place(roi2)
-
-        app.save(output_path)
-        # 改动：不再退出系统，而是返回函数，让 batch_process 继续
-        return
-
-    # Interactive default flow (单文件运行模式)
-    use_cleaned = False
-    if os.path.exists(BG_CLEANED_PATH):
-        print(f"找到已清理的背景: {BG_CLEANED_PATH}")
-        response = input("使用已清理的背景? (y/n, 默认y): ").strip().lower()
-        use_cleaned = response != 'n'
-
-    if use_cleaned:
-        print(f"使用已清理的背景: {BG_CLEANED_PATH}")
-        app = UltimatePaster(BG_CLEANED_PATH)
-    else:
-        print(f"使用原始背景: {BG_PATH}")
-        app = UltimatePaster(BG_PATH)
-        if args.clean_bg:
-            app.clean_background(args.cleaned_out)
-        elif not args.skip_clean:
-            response = input("现在清理背景吗? (y/n, 默认y): ").strip().lower()
-            if response != 'n':
-                print("\n>>> 第零步: 清理背景")
-                app.clean_background(args.cleaned_out)
-
+def process_single(bg_path, pod_path, seed_path, output_path, cleaned_out=None):
+    """处理单组图片"""
+    app = UltimatePaster(bg_path)
+    app.clean_background(cleaned_out)
     app.select_color_reference()
+
     print("\n>>> 第一步: 选择豆荚")
-    roi1 = app.get_roi_zoomed(POD_PATH, "Select Pod")
+    roi1 = app.get_roi_zoomed(pod_path, "Select Pod")
     if roi1 is not None:
         roi1 = app.match_background(roi1)
         roi1 = app.auto_mask_object(roi1)
         app.interactive_place(roi1)
 
     print("\n>>> 第二步: 选择种子")
-    roi2 = app.get_roi_zoomed(SEED_PATH, "Select Seed")
+    roi2 = app.get_roi_zoomed(seed_path, "Select Seed")
     if roi2 is not None:
         roi2 = app.match_background(roi2)
         roi2 = app.auto_mask_object(roi2, keep_top_k=2)
         app.interactive_place(roi2)
 
-    app.save(OUTPUT_PATH)
+    app.save(output_path)
 
 
-if __name__ == "__main__":
-    run_task()
+# ==========================================
+# 批处理函数 (来自 batch_process.py)
+# ==========================================
+def extract_id(filename):
+    nums = re.findall(r'(\d{4})', filename)
+    return nums[-1] if nums else None
+
+
+def build_map(folder):
+    mapping = {}
+    path_obj = Path(folder)
+    if not path_obj.exists():
+        print(f"警告: 文件夹不存在 - {folder}")
+        return {}
+    
+    for path in path_obj.glob('*'):
+        if path.is_file():
+            img_id = extract_id(path.name)
+            if img_id:
+                mapping[img_id] = str(path)
+    return mapping
+
+
+def batch_main():
+    """批处理主函数"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--bg-dir', default='images/bg')
+    parser.add_argument('--pod-dir', default='images/pod')
+    parser.add_argument('--seed-dir', default='images/seed')
+    parser.add_argument('--out-dir', default='outputs')
+    parser.add_argument('--force', action='store_true', help='覆盖现有输出')
+    parser.add_argument('--start-id', help='从此4位数ID开始 (含), 例如 0010')
+    parser.add_argument('--only-id', help='仅处理一个4位数ID, 例如 0012')
+    parser.add_argument('--ids', help='以逗号分隔的ID列表, 例如 0003,0007,0011')
+    args = parser.parse_args()
+
+    print("=" * 50)
+    print("  大豆图像处理工具 v2.0")
+    print("=" * 50)
+    print()
+    
+    print("正在扫描图片目录...")
+    bg_map = build_map(args.bg_dir)
+    pod_map = build_map(args.pod_dir)
+    seed_map = build_map(args.seed_dir)
+
+    print(f"  bg/  : {len(bg_map)} 张图片")
+    print(f"  pod/ : {len(pod_map)} 张图片")
+    print(f"  seed/: {len(seed_map)} 张图片")
+    print()
+
+    ids = sorted(set(bg_map) & set(pod_map) & set(seed_map))
+    if not ids:
+        print('错误：未找到匹配的图像组！')
+        print('请检查 images/ 下的 bg, pod, seed 文件夹是否都有同号图片。')
+        print()
+        print('文件命名规则：')
+        print('  bg/   GY2025HHN-0001.jpg  (包含4位数字)')
+        print('  pod/  GY2025-0001.jpg     (相同的4位数字)')
+        print('  seed/ GY-0001.jpg         (相同的4位数字)')
+        input("\n按回车键退出...")
+        return
+
+    if args.only_id:
+        ids = [args.only_id]
+    elif args.ids:
+        wanted = {i.strip() for i in args.ids.split(',') if i.strip()}
+        ids = [i for i in ids if i in wanted]
+
+    if args.start_id:
+        ids = [i for i in ids if i >= args.start_id]
+
+    out_dir = Path(args.out_dir)
+    out_bg = out_dir / 'bg_cleaned'
+    out_final = out_dir / 'final'
+    out_bg.mkdir(parents=True, exist_ok=True)
+    out_final.mkdir(parents=True, exist_ok=True)
+
+    print(f'找到 {len(ids)} 个匹配的图像组。')
+    print()
+
+    start_input = input(f'从第几组开始? (1-{len(ids)}, 默认1): ').strip()
+    try:
+        start_idx = int(start_input) if start_input else 1
+    except ValueError:
+        start_idx = 1
+    if start_idx < 1:
+        start_idx = 1
+    if start_idx > len(ids):
+        print('起始索引超过组数。没有要处理的内容。')
+        input("\n按回车键退出...")
+        return
+
+    for idx, img_id in enumerate(ids, 1):
+        if idx < start_idx:
+            continue
+        bg_path = bg_map[img_id]
+        pod_path = pod_map[img_id]
+        seed_path = seed_map[img_id]
+
+        cleaned_path = out_bg / f'{img_id}_bg_cleaned.jpg'
+        final_path = out_final / f'{img_id}_final.jpg'
+
+        if final_path.exists() and not args.force:
+            print(f'[{idx}/{len(ids)}] {img_id} 已存在，跳过。')
+            continue
+
+        print()
+        print("=" * 50)
+        print(f'[{idx}/{len(ids)}] 正在处理 {img_id}')
+        print("=" * 50)
+        
+        try:
+            process_single(bg_path, pod_path, seed_path, str(final_path), str(cleaned_path))
+        except Exception as e:
+            print(f"处理 {img_id} 时发生错误: {e}")
+            continue
+
+    print()
+    print("=" * 50)
+    print("所有任务已完成！")
+    print(f"输出目录: {out_dir.absolute()}")
+    print("=" * 50)
+    print()
+    input("按回车键退出...")
+
+
+# ==========================================
+# 主入口
+# ==========================================
+if __name__ == '__main__':
+    batch_main()

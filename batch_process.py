@@ -1,9 +1,27 @@
 ﻿import argparse
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
+
+# ==========================================
+# 关键改动：直接导入任务函数，而不是用 subprocess
+# ==========================================
+
+# 尝试多种导入方式以兼容打包环境
+try:
+    from main import run_task
+except (ImportError, ModuleNotFoundError):
+    # 尝试从 sys.modules 获取（在某些打包场景下）
+    try:
+        import main
+        run_task = main.run_task
+    except (ImportError, ModuleNotFoundError, AttributeError):
+        print("错误：找不到 main 模块")
+        print("请确保 main.py 和本脚本在同一目录下。")
+        print("如果是 EXE 版本，请确保 batch_process.exe 与 main.py 在同一目录")
+        input("按回车键退出...")
+        sys.exit(1)
 
 
 def extract_id(filename):
@@ -13,7 +31,12 @@ def extract_id(filename):
 
 def build_map(folder):
     mapping = {}
-    for path in Path(folder).glob('*'):
+    path_obj = Path(folder)
+    if not path_obj.exists():
+        print(f"警告: 文件夹不存在 - {folder}")
+        return {}
+    
+    for path in path_obj.glob('*'):
         if path.is_file():
             img_id = extract_id(path.name)
             if img_id:
@@ -33,13 +56,15 @@ def main():
     parser.add_argument('--ids', help='以逗号分隔的ID列表, 例如 0003,0007,0011')
     args = parser.parse_args()
 
+    print("正在扫描图片目录...")
     bg_map = build_map(args.bg_dir)
     pod_map = build_map(args.pod_dir)
     seed_map = build_map(args.seed_dir)
 
     ids = sorted(set(bg_map) & set(pod_map) & set(seed_map))
     if not ids:
-        print('未找到匹配的图像组。')
+        print('未找到匹配的图像组。请检查 images/ 下的 bg, pod, seed 文件夹是否都有同号图片。')
+        input("按回车键退出...")
         return
 
     if args.only_id:
@@ -68,6 +93,7 @@ def main():
         start_idx = 1
     if start_idx > len(ids):
         print('起始索引超过组数。没有要处理的内容。')
+        input("按回车键退出...")
         return
 
     for idx, img_id in enumerate(ids, 1):
@@ -81,14 +107,13 @@ def main():
         final_path = out_final / f'{img_id}_final.jpg'
 
         if final_path.exists() and not args.force:
-            resp = input(f'[{idx}/{len(ids)}] {img_id} 已处理。重新处理并覆盖? (y/N): ').strip().lower()
-            if resp != 'y':
-                print(f'[{idx}/{len(ids)}] 跳过 {img_id}')
-                continue
+            print(f'[{idx}/{len(ids)}] {img_id} 已存在，跳过。')
+            continue
 
-        print(f'[{idx}/{len(ids)}] 正在处理 {img_id}')
-        cmd = [
-            sys.executable, 'main.py',
+        print(f'[{idx}/{len(ids)}] 正在处理 {img_id} ...')
+        
+        # 构造参数列表
+        task_args = [
             '--bg', bg_path,
             '--pod', pod_path,
             '--seed', seed_path,
@@ -96,7 +121,20 @@ def main():
             '--clean-bg',
             '--cleaned-out', str(cleaned_path),
         ]
-        subprocess.run(cmd, check=True)
+        
+        try:
+            # === 改动：直接函数调用，不再用 subprocess ===
+            run_task(task_args)
+        except Exception as e:
+            print(f"处理 {img_id} 时发生错误: {e}")
+            continue
+
+    print("\n" + "="*30)
+    print("所有任务已完成！")
+    print(f"输出目录: {out_dir.absolute()}")
+    print("="*30 + "\n")
+    # 防止窗口直接关闭
+    input("按回车键退出...")
 
 
 if __name__ == '__main__':

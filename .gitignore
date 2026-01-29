@@ -3,6 +3,12 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Executable files
+*.exe
+
+# Large archive files
+*.zip
+
 # C extensions
 *.so
 
