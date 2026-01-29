@@ -60,10 +60,17 @@ class UltimatePaster:
 
         while True:
             preview = bg_work.copy()
-            for x1, y1, x2, y2 in rects:
-                cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                cv2.putText(preview, 'Remove', (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+            if rects:
+                overlay = preview.copy()
+                for x1, y1, x2, y2 in rects:
+                    # Filled overlay for better visibility
+                    cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1)
+                    # Thick border for clarity
+                    cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 255), 3)
+                    cv2.putText(preview, 'REMOVE', (x1, max(0, y1 - 10)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                # Blend overlay to make marked regions stand out
+                preview = cv2.addWeighted(overlay, 0.35, preview, 0.65, 0)
 
             disp_h, disp_w = int(bg_h * disp_scale), int(bg_w * disp_scale)
             preview_disp = cv2.resize(preview, (disp_w, disp_h))
