@@ -78,7 +78,7 @@ class UltimatePaster:
                         rebuild_mask()
                         print("已撤销上一个框选")
 
-            win_name = "清理背景 - 绘制矩形 | 空格确认 | ESC取消"
+            win_name = "清理背景"
             cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
             cv2.setMouseCallback(win_name, mouse_callback)
 
@@ -136,7 +136,7 @@ class UltimatePaster:
             elif event == cv2.EVENT_LBUTTONDOWN:
                 crop_x = real_x
 
-        crop_win = "可选的裁剪 - 点击设置垂直线 | 空格跳过"
+        crop_win = "选择裁剪线"
         cv2.namedWindow(crop_win, cv2.WINDOW_NORMAL)
         cv2.setMouseCallback(crop_win, crop_mouse_callback)
 
@@ -211,7 +211,7 @@ class UltimatePaster:
         else:
             src_disp = src.copy()
 
-        win_name = "选择植株颜色参考"
+        win_name = "选择参考色"
         roi_rect = self._select_roi_interactive(src_disp, win_name)
         if roi_rect is None:
             print("未选择参考区域，将使用默认参考色。")
@@ -301,7 +301,7 @@ class UltimatePaster:
         pos = [0, 0]
         placed = False
 
-        win_name = "鼠标滚轮调整大小 | 点击确认"
+        win_name = "调整位置与大小"
         cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
 
         screen_h = 900.0
