@@ -2,6 +2,7 @@
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from auto_clean import auto_clean_background
@@ -64,7 +65,7 @@ def main():
         auto_clean_background(bg_path, str(cleaned_path))
 
         cmd = [
-            'python', 'main.py',
+            sys.executable, 'main.py',
             '--cleaned', str(cleaned_path),
             '--pod', pod_path,
             '--seed', seed_path,
