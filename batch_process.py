@@ -28,6 +28,9 @@ def main():
     parser.add_argument('--seed-dir', default='images/seed')
     parser.add_argument('--out-dir', default='outputs')
     parser.add_argument('--force', action='store_true', help='Overwrite existing outputs')
+    parser.add_argument('--start-id', help='Start from this 4-digit id (inclusive), e.g. 0010')
+    parser.add_argument('--only-id', help='Process only one 4-digit id, e.g. 0012')
+    parser.add_argument('--ids', help='Comma-separated list of ids to process, e.g. 0003,0007,0011')
     args = parser.parse_args()
 
     bg_map = build_map(args.bg_dir)
@@ -38,6 +41,15 @@ def main():
     if not ids:
         print('No matching groups found.')
         return
+
+    if args.only_id:
+        ids = [args.only_id]
+    elif args.ids:
+        wanted = {i.strip() for i in args.ids.split(',') if i.strip()}
+        ids = [i for i in ids if i in wanted]
+
+    if args.start_id:
+        ids = [i for i in ids if i >= args.start_id]
 
     out_dir = Path(args.out_dir)
     out_bg = out_dir / 'bg_cleaned'
