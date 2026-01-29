@@ -5,8 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from auto_clean import auto_clean_background
-
 
 def extract_id(filename):
     nums = re.findall(r'(\d{4})', filename)
@@ -62,14 +60,14 @@ def main():
             continue
 
         print(f'[{idx}/{len(ids)}] Processing {img_id}')
-        auto_clean_background(bg_path, str(cleaned_path))
-
         cmd = [
             sys.executable, 'main.py',
-            '--cleaned', str(cleaned_path),
+            '--bg', bg_path,
             '--pod', pod_path,
             '--seed', seed_path,
             '--out', str(final_path),
+            '--clean-bg',
+            '--cleaned-out', str(cleaned_path),
         ]
         subprocess.run(cmd, check=True)
 

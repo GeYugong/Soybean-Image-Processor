@@ -19,7 +19,7 @@ class UltimatePaster:
             raise FileNotFoundError(f"Background not found: {bg_path}")
         self.bg_black_ref = np.mean(self.bg[0:50, 0:50], axis=(0, 1))
 
-    def clean_background(self):
+    def clean_background(self, output_path=None):
         print(">>> Clean background: draw rectangles to remove")
         print("1) Drag rectangles over objects to remove")
         print("2) Press SPACE to confirm, ESC to cancel")
@@ -85,8 +85,9 @@ class UltimatePaster:
 
         print(f"Inpainting {len(rects)} regions...")
         self.bg = cv2.inpaint(bg_work, mask, 5, cv2.INPAINT_TELEA)
-        cv2.imwrite(BG_CLEANED_PATH, self.bg)
-        print(f"Cleaned background saved to: {BG_CLEANED_PATH}")
+        save_path = output_path or BG_CLEANED_PATH
+        cv2.imwrite(save_path, self.bg)
+        print(f"Cleaned background saved to: {save_path}")
         self.bg_black_ref = np.mean(self.bg[0:50, 0:50], axis=(0, 1))
         return True
 
@@ -214,10 +215,12 @@ if __name__ == "__main__":
     parser.add_argument("--seed", help="Seed image path")
     parser.add_argument("--out", help="Output image path")
     parser.add_argument("--cleaned", help="Use cleaned background path (skip prompts)")
+    parser.add_argument("--clean-bg", action="store_true", help="Force manual background cleaning")
+    parser.add_argument("--cleaned-out", help="Save cleaned background to this path")
     parser.add_argument("--skip-clean", action="store_true", help="Skip manual background cleaning prompt")
     args = parser.parse_args()
 
-    batch_mode = any([args.bg, args.pod, args.seed, args.out, args.cleaned, args.skip_clean])
+    batch_mode = any([args.bg, args.pod, args.seed, args.out, args.cleaned, args.clean_bg, args.cleaned_out, args.skip_clean])
 
     if batch_mode:
         bg_path = args.cleaned or args.bg or BG_PATH
@@ -226,6 +229,8 @@ if __name__ == "__main__":
         output_path = args.out or OUTPUT_PATH
 
         app = UltimatePaster(bg_path)
+        if args.clean_bg:
+            app.clean_background(args.cleaned_out)
         print("\n>>> Step 1: Select POD")
         roi1 = app.get_roi_zoomed(pod_path, "Select POD")
         if roi1 is not None:
@@ -254,11 +259,13 @@ if __name__ == "__main__":
     else:
         print(f"Using original background: {BG_PATH}")
         app = UltimatePaster(BG_PATH)
-        if not args.skip_clean:
+        if args.clean_bg:
+            app.clean_background(args.cleaned_out)
+        elif not args.skip_clean:
             response = input("Clean background now? (y/n, default y): ").strip().lower()
             if response != 'n':
                 print("\n>>> Step 0: Clean background")
-                app.clean_background()
+                app.clean_background(args.cleaned_out)
 
     print("\n>>> Step 1: Select POD")
     roi1 = app.get_roi_zoomed(POD_PATH, "Select POD")

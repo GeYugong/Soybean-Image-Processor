@@ -1,7 +1,7 @@
 ﻿# Soybean-Image-Processor
 
 用于大豆（豆荚/种子）图像合成与背景清理的交互式工具。核心流程：
-1) 背景清理（自动）
+1) 背景清理（手动框选）
 2) 选择豆荚区域并放置
 3) 选择种子区域并放置
 4) 输出合成结果
@@ -9,9 +9,7 @@
 ## 功能概览
 
 - 背景清理
-  - 自动：检测白色牌子 + 标尺
-    - 白色牌子：单轮 inpaint
-    - 标尺：从标尺右边开始裁切（保留右侧）
+  - 手动：在背景图上框选要移除的区域，OpenCV inpaint 修复
 - 交互式抠取与放置
   - 从豆荚/种子图选择区域
   - 鼠标移动调整位置，滚轮缩放，左键确认
@@ -26,7 +24,7 @@
 │  ├─ pod/              # 豆荚图（多组）
 │  └─ seed/             # 种子图（多组）
 ├─ main.py              # 交互式合成（支持参数化）
-├─ auto_clean.py        # 自动清理背景
+├─ auto_clean.py        # 自动清理背景（可选）
 ├─ batch_process.py     # 批量处理（按编号成组）
 ├─ compare_bg.py        # 清理前后对比
 ├─ CLEANING_GUIDE.md    # 清理算法与调参说明
@@ -61,23 +59,29 @@ images/seed/ GY-0001.jpg
 python batch_process.py
 ```
 
+流程（每一组）：
+1) 打开背景图，手动框选要移除区域
+2) 打开豆荚图，框选并放置
+3) 打开种子图，框选并放置
+4) 保存结果
+
+### 背景清理操作说明
+1) 背景窗口弹出后，用鼠标左键拖拽画矩形，覆盖需要移除的物体（标尺/白牌等）。
+2) 可以画多个矩形，逐个标记。
+3) 按 `SPACE` 确认开始修复并进入下一步；按 `ESC` 取消本次清理。
+4) 窗口按高度 900px 缩放显示，实际处理为原图尺寸。
+
 输出目录：
 
 ```
 outputs/
-├─ bg_cleaned/   # 自动清理后的背景
+├─ bg_cleaned/   # 手动清理后的背景
 └─ final/        # 人工放置后的最终合成
 ```
 
 ## 单组处理
 
-### 自动清理背景
-
-```bash
-python auto_clean.py
-```
-
-### 交互式合成
+### 手动清理 + 合成
 
 ```bash
 python main.py
@@ -86,20 +90,18 @@ python main.py
 或参数化指定输入/输出：
 
 ```bash
-python main.py --cleaned <cleaned_bg> --pod <pod_img> --seed <seed_img> --out <output>
+python main.py --bg <bg_img> --pod <pod_img> --seed <seed_img> --out <output> --clean-bg --cleaned-out <bg_cleaned>
 ```
 
 ## 输出文件
 
 - `outputs/bg_cleaned/<编号>_bg_cleaned.jpg`
 - `outputs/final/<编号>_final.jpg`
-- `images/mask_debug.png`：自动清理掩码调试图
-- `images/mask_white_expanded.png`：白色牌子扩张掩码（调试）
 
 ## 注意事项
 
-- 自动清理会裁剪图像宽度（标尺左侧被裁掉）。
-- 若裁剪过多/过少，可调整 `auto_clean.py` 中标尺检测阈值和裁剪偏移。
+- 批处理是完全交互式（每组都会弹窗）。
+- 若想跳过背景清理，可去掉 `--clean-bg` 并直接使用已清理背景。
 
 ## 相关文档
 
