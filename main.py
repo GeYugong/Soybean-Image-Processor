@@ -220,7 +220,23 @@ class UltimatePaster:
         roi_bg_ref = np.mean(roi[0:20, 0:20], axis=(0, 1))
         target_ref = self.color_ref if self.color_ref is not None else self.bg_black_ref
         diff = target_ref - roi_bg_ref
-        res = roi.astype(np.float32) + diff
+
+        roi_lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
+        bg_lab = cv2.cvtColor(np.uint8([[roi_bg_ref]]), cv2.COLOR_BGR2LAB)[0, 0]
+
+        if self.color_ref is not None:
+            plant_lab = cv2.cvtColor(np.uint8([[self.color_ref]]), cv2.COLOR_BGR2LAB)[0, 0]
+            dist_bg = np.linalg.norm(roi_lab.astype(np.float32) - bg_lab.astype(np.float32), axis=2)
+            dist_plant = np.linalg.norm(roi_lab.astype(np.float32) - plant_lab.astype(np.float32), axis=2)
+            fg_mask = (dist_plant + 5 < dist_bg).astype(np.uint8)
+        else:
+            dist_bg = np.linalg.norm(roi_lab.astype(np.float32) - bg_lab.astype(np.float32), axis=2)
+            fg_mask = (dist_bg > 12).astype(np.uint8)
+
+        res = roi.astype(np.float32)
+        for c in range(3):
+            res[:, :, c] = np.where(fg_mask == 1, res[:, :, c] + diff[c], res[:, :, c])
+
         return np.clip(res, 0, 255).astype(np.uint8)
 
     def select_color_reference(self):
