@@ -24,74 +24,76 @@ class UltimatePaster:
         print("1) Drag rectangles over objects to remove")
         print("2) Press SPACE to confirm, ESC to cancel")
 
-        bg_work = self.bg.copy()
-        mask = np.zeros(bg_work.shape[:2], dtype=np.uint8)
-
-        screen_h = 900.0
-        bg_h, bg_w = bg_work.shape[:2]
-        disp_scale = screen_h / bg_h if bg_h > screen_h else 1.0
-
-        rects = []
-        drawing = False
-        rect_start = None
-
-        def mouse_callback(event, x, y, flags, param):
-            nonlocal drawing, rect_start, rects
-            real_x = int(x / disp_scale)
-            real_y = int(y / disp_scale)
-
-            if event == cv2.EVENT_LBUTTONDOWN:
-                drawing = True
-                rect_start = (real_x, real_y)
-            elif event == cv2.EVENT_LBUTTONUP:
-                if drawing and rect_start:
-                    drawing = False
-                    x1, y1 = rect_start
-                    x2, y2 = real_x, real_y
-                    x1, x2 = min(x1, x2), max(x1, x2)
-                    y1, y2 = min(y1, y2), max(y1, y2)
-                    rects.append((x1, y1, x2, y2))
-                    cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
-                    print(f"Marked region: ({x1}, {y1}) -> ({x2}, {y2})")
-
-        win_name = "Clean Background - Draw rectangles | SPACE confirm | ESC cancel"
-        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-        cv2.setMouseCallback(win_name, mouse_callback)
-
+        pass_count = 0
         while True:
-            preview = bg_work.copy()
-            if rects:
-                overlay = preview.copy()
-                for x1, y1, x2, y2 in rects:
-                    # Filled overlay for better visibility
-                    cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1)
-                    # Thick border for clarity
-                    cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 255), 3)
-                    cv2.putText(preview, 'REMOVE', (x1, max(0, y1 - 10)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-                # Blend overlay to make marked regions stand out
-                preview = cv2.addWeighted(overlay, 0.35, preview, 0.65, 0)
+            bg_work = self.bg.copy()
+            mask = np.zeros(bg_work.shape[:2], dtype=np.uint8)
 
-            disp_h, disp_w = int(bg_h * disp_scale), int(bg_w * disp_scale)
-            preview_disp = cv2.resize(preview, (disp_w, disp_h))
-            cv2.imshow(win_name, preview_disp)
+            screen_h = 900.0
+            bg_h, bg_w = bg_work.shape[:2]
+            disp_scale = screen_h / bg_h if bg_h > screen_h else 1.0
 
-            key = cv2.waitKey(10) & 0xFF
-            if key == 32:  # SPACE
+            rects = []
+            drawing = False
+            rect_start = None
+
+            def mouse_callback(event, x, y, flags, param):
+                nonlocal drawing, rect_start, rects
+                real_x = int(x / disp_scale)
+                real_y = int(y / disp_scale)
+
+                if event == cv2.EVENT_LBUTTONDOWN:
+                    drawing = True
+                    rect_start = (real_x, real_y)
+                elif event == cv2.EVENT_LBUTTONUP:
+                    if drawing and rect_start:
+                        drawing = False
+                        x1, y1 = rect_start
+                        x2, y2 = real_x, real_y
+                        x1, x2 = min(x1, x2), max(x1, x2)
+                        y1, y2 = min(y1, y2), max(y1, y2)
+                        rects.append((x1, y1, x2, y2))
+                        cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
+                        print(f"Marked region: ({x1}, {y1}) -> ({x2}, {y2})")
+
+            win_name = "Clean Background - Draw rectangles | SPACE confirm | ESC cancel"
+            cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+            cv2.setMouseCallback(win_name, mouse_callback)
+
+            while True:
+                preview = bg_work.copy()
+                if rects:
+                    overlay = preview.copy()
+                    for x1, y1, x2, y2 in rects:
+                        cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1)
+                        cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 255), 3)
+                        cv2.putText(preview, 'REMOVE', (x1, max(0, y1 - 10)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                    preview = cv2.addWeighted(overlay, 0.35, preview, 0.65, 0)
+
+                disp_h, disp_w = int(bg_h * disp_scale), int(bg_w * disp_scale)
+                preview_disp = cv2.resize(preview, (disp_w, disp_h))
+                cv2.imshow(win_name, preview_disp)
+
+                key = cv2.waitKey(10) & 0xFF
+                if key == 32:  # SPACE
+                    break
+                if key == 27:  # ESC
+                    cv2.destroyWindow(win_name)
+                    print("Canceled background cleaning")
+                    return False
+
+            cv2.destroyWindow(win_name)
+
+            if len(rects) == 0:
+                if pass_count == 0:
+                    print("No regions marked, skip cleaning")
+                    return False
                 break
-            if key == 27:  # ESC
-                cv2.destroyWindow(win_name)
-                print("Canceled background cleaning")
-                return False
 
-        cv2.destroyWindow(win_name)
-
-        if len(rects) == 0:
-            print("No regions marked, skip cleaning")
-            return False
-
-        print(f"Inpainting {len(rects)} regions...")
-        self.bg = cv2.inpaint(bg_work, mask, 5, cv2.INPAINT_TELEA)
+            print(f"Inpainting {len(rects)} regions... (pass {pass_count + 1})")
+            self.bg = cv2.inpaint(bg_work, mask, 5, cv2.INPAINT_TELEA)
+            pass_count += 1
         save_path = output_path or BG_CLEANED_PATH
         cv2.imwrite(save_path, self.bg)
         print(f"Cleaned background saved to: {save_path}")
