@@ -18,6 +18,7 @@ class UltimatePaster:
         if self.bg is None:
             raise FileNotFoundError(f"Background not found: {bg_path}")
         self.bg_black_ref = np.mean(self.bg[0:50, 0:50], axis=(0, 1))
+        self.color_ref = None
 
     def clean_background(self, output_path=None):
         print(">>> 清理背景：绘制矩形来移除对象")
@@ -178,9 +179,43 @@ class UltimatePaster:
 
     def match_background(self, roi):
         roi_bg_ref = np.mean(roi[0:20, 0:20], axis=(0, 1))
-        diff = self.bg_black_ref - roi_bg_ref
+        target_ref = self.color_ref if self.color_ref is not None else self.bg_black_ref
+        diff = target_ref - roi_bg_ref
         res = roi.astype(np.float32) + diff
         return np.clip(res, 0, 255).astype(np.uint8)
+
+    def select_color_reference(self):
+        print("请在背景图中框选一块“植株颜色”区域（SPACE/ENTER确认）")
+        src = self.bg.copy()
+        h, w = src.shape[:2]
+        target_h = 900.0
+        scale = target_h / h if h > target_h else 1.0
+
+        if scale < 1.0:
+            src_disp = cv2.resize(src, (int(w * scale), int(target_h)))
+        else:
+            src_disp = src.copy()
+
+        win_name = "选择植株颜色参考"
+        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+        roi_rect = cv2.selectROI(win_name, src_disp, showCrosshair=True, fromCenter=False)
+        cv2.destroyWindow(win_name)
+
+        x_s, y_s, w_s, h_s = roi_rect
+        if w_s == 0 or h_s == 0:
+            print("未选择参考区域，将使用默认参考色。")
+            return False
+
+        real_x, real_y = int(x_s / scale), int(y_s / scale)
+        real_w, real_h = int(w_s / scale), int(h_s / scale)
+        ref_patch = src[real_y:real_y + real_h, real_x:real_x + real_w]
+        if ref_patch.size == 0:
+            print("参考区域无效，将使用默认参考色。")
+            return False
+
+        self.color_ref = np.mean(ref_patch, axis=(0, 1))
+        print("已设置植株颜色参考。")
+        return True
 
     def interactive_place(self, inset_img):
         current_scale = (self.bg.shape[1] * 0.35) / inset_img.shape[1]
@@ -289,6 +324,7 @@ if __name__ == "__main__":
         app = UltimatePaster(bg_path)
         if args.clean_bg:
             app.clean_background(args.cleaned_out)
+        app.select_color_reference()
         print("\n>>> 第一步: 选择豆荚")
         roi1 = app.get_roi_zoomed(pod_path, "选择豆荚")
         if roi1 is not None:
@@ -325,6 +361,7 @@ if __name__ == "__main__":
                 print("\n>>> 第零步: 清理背景")
                 app.clean_background(args.cleaned_out)
 
+    app.select_color_reference()
     print("\n>>> 第一步: 选择豆荚")
     roi1 = app.get_roi_zoomed(POD_PATH, "选择豆荚")
     if roi1 is not None:
