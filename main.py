@@ -26,6 +26,7 @@ class UltimatePaster:
         print("2) 按空格键确认，按ESC取消")
 
         pass_count = 0
+        skip_more = False
         while True:
             bg_work = self.bg.copy()
             mask = np.zeros(bg_work.shape[:2], dtype=np.uint8)
@@ -105,6 +106,21 @@ class UltimatePaster:
                 cv2.imshow(win_name, preview_disp)
 
                 key = cv2.waitKey(10) & 0xFF
+                if key in (ord('r'), ord('R')):
+                    rects.clear()
+                    mask[:] = 0
+                    drawing = False
+                    rect_start = None
+                    current_pos = None
+                    print("已重做当前步骤")
+                    continue
+                if key in (ord('s'), ord('S')):
+                    if pass_count == 0 and len(rects) == 0:
+                        cv2.destroyWindow(win_name)
+                        print("已跳过背景清理")
+                        return False
+                    skip_more = True
+                    break
                 if key == 32:  # SPACE
                     break
                 if key == 27:  # ESC
@@ -123,6 +139,8 @@ class UltimatePaster:
             print(f"修复 {len(rects)} 个区域... (第 {pass_count + 1} 次)")
             self.bg = cv2.inpaint(bg_work, mask, 5, cv2.INPAINT_TELEA)
             pass_count += 1
+            if skip_more:
+                break
 
         # Optional crop after finishing all background edits
         crop_x = None
@@ -153,7 +171,13 @@ class UltimatePaster:
             cv2.imshow(crop_win, preview_disp)
 
             key = cv2.waitKey(10) & 0xFF
-            if key == 32:  # SPACE skip
+            if key in (ord('r'), ord('R')):
+                crop_x = None
+                current_x = None
+                print("已重做当前步骤")
+                continue
+            if key in (ord('s'), ord('S'), 27):  # skip or exit
+                crop_x = None
                 break
             if crop_x is not None:
                 # Confirm crop after click
@@ -182,7 +206,7 @@ class UltimatePaster:
         else:
             src_disp = src.copy()
 
-        print(f"在 [{win_name}] 中框选区域，按 SPACE/ENTER 确认，右键撤销")
+        print(f"在 [{win_name}] 中框选区域，SPACE/ENTER 确认，R 重做，S 跳过，ESC 退出，右键撤销")
         roi_rect = self._select_roi_interactive(src_disp, win_name)
         if roi_rect is None:
             return None
@@ -200,7 +224,7 @@ class UltimatePaster:
         return np.clip(res, 0, 255).astype(np.uint8)
 
     def select_color_reference(self):
-        print("请在背景图中框选一块“植株颜色”区域（SPACE/ENTER确认）")
+        print("请在背景图中框选一块“植株颜色”区域（SPACE/ENTER确认，R 重做，S 跳过，ESC 退出）")
         src = self.bg.copy()
         h, w = src.shape[:2]
         target_h = 900.0
@@ -287,6 +311,15 @@ class UltimatePaster:
 
             cv2.imshow(win_name, preview)
             key = cv2.waitKey(10) & 0xFF
+            if key in (ord('r'), ord('R')):
+                rect = None
+                rect_start = None
+                drawing = False
+                print("已重做当前步骤")
+                continue
+            if key in (ord('s'), ord('S')):
+                rect = None
+                break
             if key in (32, 13):  # SPACE or ENTER
                 break
             if key == 27:  # ESC
@@ -298,6 +331,7 @@ class UltimatePaster:
 
     def interactive_place(self, inset_img):
         current_scale = (self.bg.shape[1] * 0.35) / inset_img.shape[1]
+        initial_scale = current_scale
         pos = [0, 0]
         placed = False
 
@@ -353,7 +387,13 @@ class UltimatePaster:
             cv2.imshow(win_name, cv2.resize(preview, (disp_w, disp_h)))
 
             key = cv2.waitKey(10) & 0xFF
-            if key == 27:
+            if key in (ord('r'), ord('R')):
+                current_scale = initial_scale
+                pos[0], pos[1] = 0, 0
+                print("已重做当前步骤")
+                continue
+            if key in (ord('s'), ord('S'), 27):
+                placed = False
                 break
 
         cv2.destroyWindow(win_name)
