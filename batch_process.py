@@ -27,10 +27,10 @@ def main():
     parser.add_argument('--pod-dir', default='images/pod')
     parser.add_argument('--seed-dir', default='images/seed')
     parser.add_argument('--out-dir', default='outputs')
-    parser.add_argument('--force', action='store_true', help='Overwrite existing outputs')
-    parser.add_argument('--start-id', help='Start from this 4-digit id (inclusive), e.g. 0010')
-    parser.add_argument('--only-id', help='Process only one 4-digit id, e.g. 0012')
-    parser.add_argument('--ids', help='Comma-separated list of ids to process, e.g. 0003,0007,0011')
+    parser.add_argument('--force', action='store_true', help='覆盖现有输出')
+    parser.add_argument('--start-id', help='从此4位数ID开始 (含), 例如 0010')
+    parser.add_argument('--only-id', help='仅处理一个4位数ID, 例如 0012')
+    parser.add_argument('--ids', help='以逗号分隔的ID列表, 例如 0003,0007,0011')
     args = parser.parse_args()
 
     bg_map = build_map(args.bg_dir)
@@ -39,7 +39,7 @@ def main():
 
     ids = sorted(set(bg_map) & set(pod_map) & set(seed_map))
     if not ids:
-        print('No matching groups found.')
+        print('未找到匹配的图像组。')
         return
 
     if args.only_id:
@@ -57,9 +57,9 @@ def main():
     out_bg.mkdir(parents=True, exist_ok=True)
     out_final.mkdir(parents=True, exist_ok=True)
 
-    print(f'Found {len(ids)} groups.')
+    print(f'找到 {len(ids)} 个图像组。')
 
-    start_input = input(f'Start from which group? (1-{len(ids)}, default 1): ').strip()
+    start_input = input(f'从第几组开始? (1-{len(ids)}, 默认1): ').strip()
     try:
         start_idx = int(start_input) if start_input else 1
     except ValueError:
@@ -67,7 +67,7 @@ def main():
     if start_idx < 1:
         start_idx = 1
     if start_idx > len(ids):
-        print('Start index exceeds group count. Nothing to do.')
+        print('起始索引超过组数。没有要处理的内容。')
         return
 
     for idx, img_id in enumerate(ids, 1):
@@ -81,12 +81,12 @@ def main():
         final_path = out_final / f'{img_id}_final.jpg'
 
         if final_path.exists() and not args.force:
-            resp = input(f'[{idx}/{len(ids)}] {img_id} already done. Redo and overwrite? (y/N): ').strip().lower()
+            resp = input(f'[{idx}/{len(ids)}] {img_id} 已处理。重新处理并覆盖? (y/N): ').strip().lower()
             if resp != 'y':
-                print(f'[{idx}/{len(ids)}] Skip {img_id}')
+                print(f'[{idx}/{len(ids)}] 跳过 {img_id}')
                 continue
 
-        print(f'[{idx}/{len(ids)}] Processing {img_id}')
+        print(f'[{idx}/{len(ids)}] 正在处理 {img_id}')
         cmd = [
             sys.executable, 'main.py',
             '--bg', bg_path,

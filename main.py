@@ -20,9 +20,9 @@ class UltimatePaster:
         self.bg_black_ref = np.mean(self.bg[0:50, 0:50], axis=(0, 1))
 
     def clean_background(self, output_path=None):
-        print(">>> Clean background: draw rectangles to remove")
-        print("1) Drag rectangles over objects to remove")
-        print("2) Press SPACE to confirm, ESC to cancel")
+        print(">>> 清理背景：绘制矩形来移除对象")
+        print("1) 在要移除的对象上拖动矩形")
+        print("2) 按空格键确认，按ESC取消")
 
         pass_count = 0
         while True:
@@ -57,9 +57,9 @@ class UltimatePaster:
                         y1, y2 = min(y1, y2), max(y1, y2)
                         rects.append((x1, y1, x2, y2))
                         cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
-                        print(f"Marked region: ({x1}, {y1}) -> ({x2}, {y2})")
+                        print(f"标记区域: ({x1}, {y1}) -> ({x2}, {y2})")
 
-            win_name = "Clean Background - Draw rectangles | SPACE confirm | ESC cancel"
+            win_name = "清理背景 - 绘制矩形 | 空格确认 | ESC取消"
             cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
             cv2.setMouseCallback(win_name, mouse_callback)
 
@@ -70,7 +70,7 @@ class UltimatePaster:
                     for x1, y1, x2, y2 in rects:
                         cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1)
                         cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 255), 3)
-                        cv2.putText(preview, 'REMOVE', (x1, max(0, y1 - 10)),
+                        cv2.putText(preview, '移除', (x1, max(0, y1 - 10)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
                     if drawing and rect_start and current_pos:
                         x1, y1 = rect_start
@@ -90,18 +90,18 @@ class UltimatePaster:
                     break
                 if key == 27:  # ESC
                     cv2.destroyWindow(win_name)
-                    print("Canceled background cleaning")
+                    print("已取消背景清理")
                     return False
 
             cv2.destroyWindow(win_name)
 
             if len(rects) == 0:
                 if pass_count == 0:
-                    print("No regions marked, skip cleaning")
+                    print("未标记任何区域，跳过清理")
                     return False
                 break
 
-            print(f"Inpainting {len(rects)} regions... (pass {pass_count + 1})")
+            print(f"修复 {len(rects)} 个区域... (第 {pass_count + 1} 次)")
             self.bg = cv2.inpaint(bg_work, mask, 5, cv2.INPAINT_TELEA)
             pass_count += 1
 
@@ -117,7 +117,7 @@ class UltimatePaster:
             elif event == cv2.EVENT_LBUTTONDOWN:
                 crop_x = real_x
 
-        crop_win = "Optional Crop - Click to set vertical line | SPACE to skip"
+        crop_win = "可选的裁剪 - 点击设置垂直线 | 空格跳过"
         cv2.namedWindow(crop_win, cv2.WINDOW_NORMAL)
         cv2.setMouseCallback(crop_win, crop_mouse_callback)
 
@@ -126,7 +126,7 @@ class UltimatePaster:
             x_line = crop_x if crop_x is not None else current_x
             if x_line is not None:
                 cv2.line(preview, (x_line, 0), (x_line, preview.shape[0]), (0, 255, 255), 2)
-                cv2.putText(preview, 'CROP FROM HERE ->', (x_line + 10, 30),
+                cv2.putText(preview, '从这里开始裁剪 ->', (x_line + 10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
             disp_h, disp_w = int(self.bg.shape[0] * disp_scale), int(self.bg.shape[1] * disp_scale)
@@ -145,11 +145,11 @@ class UltimatePaster:
             self.bg = self.bg[:, crop_x:]
         save_path = output_path or BG_CLEANED_PATH
         cv2.imwrite(save_path, self.bg)
-        print(f"Cleaned background saved to: {save_path}")
+        print(f"清理后的背景已保存到: {save_path}")
         self.bg_black_ref = np.mean(self.bg[0:50, 0:50], axis=(0, 1))
         return True
 
-    def get_roi_zoomed(self, img_path, win_name="Select Region"):
+    def get_roi_zoomed(self, img_path, win_name="选择区域"):
         src = cv2.imread(img_path)
         if src is None:
             raise FileNotFoundError(f"Image not found: {img_path}")
@@ -163,7 +163,7 @@ class UltimatePaster:
         else:
             src_disp = src.copy()
 
-        print(f"Select ROI in [{win_name}] then press SPACE/ENTER")
+        print(f"在 [{win_name}] 中选择感兴趣区域，然后按空格或回车键")
         cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
         roi_rect = cv2.selectROI(win_name, src_disp, showCrosshair=True, fromCenter=False)
         cv2.destroyWindow(win_name)
@@ -187,7 +187,7 @@ class UltimatePaster:
         pos = [0, 0]
         placed = False
 
-        win_name = "Mouse Wheel to Resize | Click to Confirm"
+        win_name = "鼠标滚轮调整大小 | 点击确认"
         cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
 
         screen_h = 900.0
@@ -206,16 +206,16 @@ class UltimatePaster:
                     current_scale *= 1.05
                 else:
                     current_scale *= 0.95
-                print(f"Current scale: {current_scale:.2f}")
+                print(f"当前缩放比例: {current_scale:.2f}")
             elif event == cv2.EVENT_LBUTTONDOWN:
                 placed = True
 
         cv2.setMouseCallback(win_name, mouse_callback)
 
-        print(">>> Adjust placement")
-        print("  [Mouse move] change position")
-        print("  [Mouse wheel] zoom")
-        print("  [Left click] confirm")
+        print(">>> 调整放置位置")
+        print("  [鼠标移动] 改变位置")
+        print("  [鼠标滚轮] 缩放")
+        print("  [左键点击] 确认")
 
         while not placed:
             h_i, w_i = inset_img.shape[:2]
@@ -259,23 +259,23 @@ class UltimatePaster:
 
             if y2 > y1 and x2 > x1:
                 self.bg[y1:y2, x1:x2] = inset_final[iy1:iy2, ix1:ix2]
-                print("Placement confirmed")
+                print("放置已确认")
 
     def save(self, output_path=OUTPUT_PATH):
         cv2.imwrite(output_path, self.bg)
-        print(f"Done: {output_path}")
+        print(f"完成: {output_path}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bg", help="Background image path")
-    parser.add_argument("--pod", help="Pod image path")
-    parser.add_argument("--seed", help="Seed image path")
-    parser.add_argument("--out", help="Output image path")
-    parser.add_argument("--cleaned", help="Use cleaned background path (skip prompts)")
-    parser.add_argument("--clean-bg", action="store_true", help="Force manual background cleaning")
-    parser.add_argument("--cleaned-out", help="Save cleaned background to this path")
-    parser.add_argument("--skip-clean", action="store_true", help="Skip manual background cleaning prompt")
+    parser.add_argument("--bg", help="背景图像路径")
+    parser.add_argument("--pod", help="豆荚图像路径")
+    parser.add_argument("--seed", help="种子图像路径")
+    parser.add_argument("--out", help="输出图像路径")
+    parser.add_argument("--cleaned", help="使用已清理的背景路径 (跳过提示)")
+    parser.add_argument("--clean-bg", action="store_true", help="强制手动清理背景")
+    parser.add_argument("--cleaned-out", help="将清理后的背景保存到此路径")
+    parser.add_argument("--skip-clean", action="store_true", help="跳过手动清理背景提示")
     args = parser.parse_args()
 
     batch_mode = any([args.bg, args.pod, args.seed, args.out, args.cleaned, args.clean_bg, args.cleaned_out, args.skip_clean])
@@ -289,14 +289,14 @@ if __name__ == "__main__":
         app = UltimatePaster(bg_path)
         if args.clean_bg:
             app.clean_background(args.cleaned_out)
-        print("\n>>> Step 1: Select POD")
-        roi1 = app.get_roi_zoomed(pod_path, "Select POD")
+        print("\n>>> 第一步: 选择豆荚")
+        roi1 = app.get_roi_zoomed(pod_path, "选择豆荚")
         if roi1 is not None:
             roi1 = app.match_background(roi1)
             app.interactive_place(roi1)
 
-        print("\n>>> Step 2: Select SEED")
-        roi2 = app.get_roi_zoomed(seed_path, "Select SEED")
+        print("\n>>> 第二步: 选择种子")
+        roi2 = app.get_roi_zoomed(seed_path, "选择种子")
         if roi2 is not None:
             roi2 = app.match_background(roi2)
             app.interactive_place(roi2)
@@ -307,32 +307,32 @@ if __name__ == "__main__":
     # Interactive default flow
     use_cleaned = False
     if os.path.exists(BG_CLEANED_PATH):
-        print(f"Found cleaned background: {BG_CLEANED_PATH}")
-        response = input("Use cleaned background? (y/n, default y): ").strip().lower()
+        print(f"找到已清理的背景: {BG_CLEANED_PATH}")
+        response = input("使用已清理的背景? (y/n, 默认y): ").strip().lower()
         use_cleaned = response != 'n'
 
     if use_cleaned:
-        print(f"Using cleaned background: {BG_CLEANED_PATH}")
+        print(f"使用已清理的背景: {BG_CLEANED_PATH}")
         app = UltimatePaster(BG_CLEANED_PATH)
     else:
-        print(f"Using original background: {BG_PATH}")
+        print(f"使用原始背景: {BG_PATH}")
         app = UltimatePaster(BG_PATH)
         if args.clean_bg:
             app.clean_background(args.cleaned_out)
         elif not args.skip_clean:
-            response = input("Clean background now? (y/n, default y): ").strip().lower()
+            response = input("现在清理背景吗? (y/n, 默认y): ").strip().lower()
             if response != 'n':
-                print("\n>>> Step 0: Clean background")
+                print("\n>>> 第零步: 清理背景")
                 app.clean_background(args.cleaned_out)
 
-    print("\n>>> Step 1: Select POD")
-    roi1 = app.get_roi_zoomed(POD_PATH, "Select POD")
+    print("\n>>> 第一步: 选择豆荚")
+    roi1 = app.get_roi_zoomed(POD_PATH, "选择豆荚")
     if roi1 is not None:
         roi1 = app.match_background(roi1)
         app.interactive_place(roi1)
 
-    print("\n>>> Step 2: Select SEED")
-    roi2 = app.get_roi_zoomed(SEED_PATH, "Select SEED")
+    print("\n>>> 第二步: 选择种子")
+    roi2 = app.get_roi_zoomed(SEED_PATH, "选择种子")
     if roi2 is not None:
         roi2 = app.match_background(roi2)
         app.interactive_place(roi2)

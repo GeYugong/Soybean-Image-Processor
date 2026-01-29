@@ -6,20 +6,20 @@ import numpy as np
 
 def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     """
-    Auto clean background:
-    - Detect a single white sign (largest connected component)
-    - Detect a single ruler on the left (vertical, dark)
-    - Inpaint ONLY the white sign (single pass)
-    - Fill ruler area with nearby background color
+    自动清理背景:
+    - 检测单个白色标志 (最大连通分量)
+    - 检测左侧的单个尺子 (竖直, 深色)
+    - 仅修复白色标志 (单次通道)
+    - 用附近的背景颜色填充尺子区域
     """
-    print(f"Loading background: {bg_path}")
+    print(f"加载背景: {bg_path}")
     bg = cv2.imread(bg_path)
 
     if bg is None:
-        raise FileNotFoundError(f"Background not found: {bg_path}")
+        raise FileNotFoundError(f"未找到背景: {bg_path}")
 
     h, w = bg.shape[:2]
-    print(f"Background size: {h}x{w}")
+    print(f"背景大小: {h}x{w}")
 
     # --- White sign detection (HSV threshold) ---
     hsv = cv2.cvtColor(bg, cv2.COLOR_BGR2HSV)
@@ -61,9 +61,9 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     if best is not None:
         ruler_col, end_col, score = best
         ruler_width = end_col - ruler_col + 1
-        print(f"Ruler candidate: {ruler_col}-{end_col}, width={ruler_width}, dark={score:.2f}")
+        print(f"尺子候选: {ruler_col}-{end_col}, 宽度={ruler_width}, 暗度={score:.2f}")
     else:
-        print("No ruler candidate matched constraints")
+        print("未找到符合约束的尺子候选")
 
     if ruler_col >= 0 and ruler_width > 0 and ruler_width < 300:
         ruler_mask[:, ruler_col:ruler_col + ruler_width] = 255
@@ -71,14 +71,14 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
         x1 = max(0, ruler_col - expand)
         x2 = min(w, ruler_col + ruler_width + expand)
         ruler_mask[:, x1:x2] = 255
-        print(f"Ruler mask set: cols {x1}-{x2}")
+        print(f"尺子掩码设置: 列 {x1}-{x2}")
     else:
-        print(f"Ruler not found or invalid width: col={ruler_col}, width={ruler_width}")
+        print(f"未找到尺子或宽度无效: col={ruler_col}, width={ruler_width}")
 
-    # --- White sign: largest connected component ---
+    # --- 白色标志: 最大连通分量 ---
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(white_mask_raw, connectivity=8)
     connected_mask = np.zeros((h, w), dtype=np.uint8)
-    print(f"White components: {num_labels - 1}")
+    print(f"白色分量: {num_labels - 1}")
 
     best = None  # (area, x, y, w, h)
     for i in range(1, num_labels):
@@ -120,14 +120,14 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open)
 
     pixel_count = np.sum(mask > 0)
-    print(f"Pixels to inpaint: {pixel_count} ({pixel_count / (h * w) * 100:.2f}%)")
+    print(f"要修复的像素: {pixel_count} ({pixel_count / (h * w) * 100:.2f}%)")
 
     cv2.imwrite('images/mask_debug.png', mask_all)
     cv2.imwrite('images/mask_white_expanded.png', white_mask_expanded)
 
-    # Single-pass inpaint (white sign only)
+    # 单次通道修复 (仅白色标志)
     result = bg.copy()
-    print("Single-pass inpaint (Telea, radius=40)...")
+    print("单次通道修复 (Telea, 半径=40)...")
     result = cv2.inpaint(result, mask, 40, cv2.INPAINT_TELEA)
 
     # Ruler: crop away everything to the left of the ruler's right edge
@@ -140,31 +140,31 @@ def auto_clean_background(bg_path, output_path='images/bg_cleaned.png'):
             result = result[:, crop_start:]
 
     cv2.imwrite(output_path, result)
-    print(f"Done. Saved to: {output_path}")
+    print(f"完成。已保存到: {output_path}")
     return result
 
 
 def manual_clean_with_preview(bg_path, output_path='images/bg_cleaned.png'):
-    """Manual preview mode: show detected mask, then single-pass inpaint."""
-    print(f"Loading background: {bg_path}")
+    """手动预览模式: 显示检测到的掩码, 然后单次通道修复。"""
+    print(f"加载背景: {bg_path}")
     bg = cv2.imread(bg_path)
 
     if bg is None:
-        raise FileNotFoundError(f"Background not found: {bg_path}")
+        raise FileNotFoundError(f"未找到背景: {bg_path}")
 
     h, w = bg.shape[:2]
 
-    # White detection
+    # 白色检测
     hsv = cv2.cvtColor(bg, cv2.COLOR_BGR2HSV)
     white_lower = np.array([0, 0, 220])
     white_upper = np.array([180, 40, 255])
     white_mask = cv2.inRange(hsv, white_lower, white_upper)
 
-    # Gray detection (ruler-ish)
+    # 灰色检测 (尺子类型)
     gray = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY)
     gray_mask = cv2.inRange(gray, 150, 200)
 
-    # Edge detection (ruler-ish)
+    # 边缘检测 (尺子类型)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     edges = cv2.Canny(blurred, 50, 150)
 
@@ -187,7 +187,7 @@ def manual_clean_with_preview(bg_path, output_path='images/bg_cleaned.png'):
                     y2 = min(h, y + ch + expand)
                     cv2.rectangle(ruler_mask, (x1, y1), (x2, y2), 255, -1)
 
-    # Connected components for white sign
+    # 白色标志的连通分量
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(white_mask, connectivity=8)
     connected_mask = np.zeros((h, w), dtype=np.uint8)
 
@@ -213,12 +213,12 @@ def manual_clean_with_preview(bg_path, output_path='images/bg_cleaned.png'):
         y2 = min(h, y + h_comp + expand)
         cv2.rectangle(connected_mask, (x1, y1), (x2, y2), 255, -1)
 
-    # Merge masks
+    # 合并掩码
     mask = cv2.bitwise_or(white_mask, ruler_mask)
     mask = cv2.bitwise_or(mask, gray_mask)
     mask = cv2.bitwise_or(mask, connected_mask)
 
-    # Morphology
+    # 形态学操作
     kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close)
     kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (8, 8))
@@ -226,8 +226,8 @@ def manual_clean_with_preview(bg_path, output_path='images/bg_cleaned.png'):
     kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open)
 
-    # Preview
-    print("\nPreview detected regions. Press any key to continue...")
+    # 预览
+    print("\n预览检测到的区域。按任意键继续...")
     disp_scale = 900.0 / h if h > 900 else 1.0
     disp_h, disp_w = int(h * disp_scale), int(w * disp_scale)
 
@@ -237,16 +237,16 @@ def manual_clean_with_preview(bg_path, output_path='images/bg_cleaned.png'):
     combined = cv2.addWeighted(bg, 0.7, mask_color, 0.3, 0)
     combined_disp = cv2.resize(combined, (disp_w, disp_h))
 
-    cv2.imshow("Detected regions to remove (red)", combined_disp)
+    cv2.imshow("检测到的要移除的区域 (红色)", combined_disp)
     cv2.waitKey(0)
-    cv2.destroyWindow("Detected regions to remove (red)")
+    cv2.destroyWindow("检测到的要移除的区域 (红色)")
 
-    # Single-pass inpaint
-    print("Single-pass inpaint (Telea)...")
+    # 单次通道修复
+    print("单次通道修复 (Telea)...")
     result = cv2.inpaint(bg, mask, 15, cv2.INPAINT_TELEA)
 
     cv2.imwrite(output_path, result)
-    print(f"Done. Saved to: {output_path}")
+    print(f"完成。已保存到: {output_path}")
     return result
 
 
