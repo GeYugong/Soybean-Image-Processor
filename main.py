@@ -104,6 +104,45 @@ class UltimatePaster:
             print(f"Inpainting {len(rects)} regions... (pass {pass_count + 1})")
             self.bg = cv2.inpaint(bg_work, mask, 5, cv2.INPAINT_TELEA)
             pass_count += 1
+
+        # Optional crop after finishing all background edits
+        crop_x = None
+        current_x = None
+
+        def crop_mouse_callback(event, x, y, flags, param):
+            nonlocal crop_x, current_x
+            real_x = int(x / disp_scale)
+            if event == cv2.EVENT_MOUSEMOVE:
+                current_x = real_x
+            elif event == cv2.EVENT_LBUTTONDOWN:
+                crop_x = real_x
+
+        crop_win = "Optional Crop - Click to set vertical line | SPACE to skip"
+        cv2.namedWindow(crop_win, cv2.WINDOW_NORMAL)
+        cv2.setMouseCallback(crop_win, crop_mouse_callback)
+
+        while True:
+            preview = self.bg.copy()
+            x_line = crop_x if crop_x is not None else current_x
+            if x_line is not None:
+                cv2.line(preview, (x_line, 0), (x_line, preview.shape[0]), (0, 255, 255), 2)
+                cv2.putText(preview, 'CROP FROM HERE ->', (x_line + 10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+            disp_h, disp_w = int(self.bg.shape[0] * disp_scale), int(self.bg.shape[1] * disp_scale)
+            preview_disp = cv2.resize(preview, (disp_w, disp_h))
+            cv2.imshow(crop_win, preview_disp)
+
+            key = cv2.waitKey(10) & 0xFF
+            if key == 32:  # SPACE skip
+                break
+            if crop_x is not None:
+                # Confirm crop after click
+                break
+
+        cv2.destroyWindow(crop_win)
+        if crop_x is not None and 0 < crop_x < self.bg.shape[1]:
+            self.bg = self.bg[:, crop_x:]
         save_path = output_path or BG_CLEANED_PATH
         cv2.imwrite(save_path, self.bg)
         print(f"Cleaned background saved to: {save_path}")
