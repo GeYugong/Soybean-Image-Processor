@@ -216,27 +216,31 @@ class UltimatePaster:
         real_w, real_h = int(w_s / scale), int(h_s / scale)
         return src[real_y:real_y + real_h, real_x:real_x + real_w]
 
+    def auto_mask_object(self, roi, keep_top_k=1):
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        _, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            contours = sorted(contours, key=cv2.contourArea, reverse=True)
+            clean_mask = np.zeros_like(mask)
+            for c in contours[:keep_top_k]:
+                cv2.drawContours(clean_mask, [c], -1, 255, -1)
+            mask = clean_mask
+
+        mask = cv2.GaussianBlur(mask, (3, 3), 0)
+        b, g, r = cv2.split(roi)
+        rgba = cv2.merge([b, g, r, mask])
+        return rgba
+
     def match_background(self, roi):
         roi_bg_ref = np.mean(roi[0:20, 0:20], axis=(0, 1))
         target_ref = self.color_ref if self.color_ref is not None else self.bg_black_ref
         diff = target_ref - roi_bg_ref
-
-        roi_lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
-        bg_lab = cv2.cvtColor(np.uint8([[roi_bg_ref]]), cv2.COLOR_BGR2LAB)[0, 0]
-
-        if self.color_ref is not None:
-            plant_lab = cv2.cvtColor(np.uint8([[self.color_ref]]), cv2.COLOR_BGR2LAB)[0, 0]
-            dist_bg = np.linalg.norm(roi_lab.astype(np.float32) - bg_lab.astype(np.float32), axis=2)
-            dist_plant = np.linalg.norm(roi_lab.astype(np.float32) - plant_lab.astype(np.float32), axis=2)
-            fg_mask = (dist_plant + 5 < dist_bg).astype(np.uint8)
-        else:
-            dist_bg = np.linalg.norm(roi_lab.astype(np.float32) - bg_lab.astype(np.float32), axis=2)
-            fg_mask = (dist_bg > 12).astype(np.uint8)
-
-        res = roi.astype(np.float32)
-        for c in range(3):
-            res[:, :, c] = np.where(fg_mask == 1, res[:, :, c] + diff[c], res[:, :, c])
-
+        res = roi.astype(np.float32) + diff
         return np.clip(res, 0, 255).astype(np.uint8)
 
     def select_color_reference(self):
@@ -396,7 +400,17 @@ class UltimatePaster:
             ix1, ix2 = x1 - top_x, x2 - top_x
 
             if y2 > y1 and x2 > x1:
-                preview[y1:y2, x1:x2] = inset_resized[iy1:iy2, ix1:ix2]
+                region = preview[y1:y2, x1:x2]
+                ins = inset_resized[iy1:iy2, ix1:ix2]
+                if ins.shape[2] == 4:
+                    alpha = ins[:, :, 3] / 255.0
+                    alpha = np.stack([alpha] * 3, axis=2)
+                    fg = ins[:, :, :3]
+                    blended = (fg * alpha + region * (1 - alpha)).astype(np.uint8)
+                    region[:] = blended
+                else:
+                    region[:] = ins
+                preview[y1:y2, x1:x2] = region
                 cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
             disp_h, disp_w = int(bg_h * disp_scale), int(bg_w * disp_scale)
@@ -428,7 +442,17 @@ class UltimatePaster:
             ix1, ix2 = x1 - top_x, x2 - top_x
 
             if y2 > y1 and x2 > x1:
-                self.bg[y1:y2, x1:x2] = inset_final[iy1:iy2, ix1:ix2]
+                region = self.bg[y1:y2, x1:x2]
+                ins = inset_final[iy1:iy2, ix1:ix2]
+                if ins.shape[2] == 4:
+                    alpha = ins[:, :, 3] / 255.0
+                    alpha = np.stack([alpha] * 3, axis=2)
+                    fg = ins[:, :, :3]
+                    blended = (fg * alpha + region * (1 - alpha)).astype(np.uint8)
+                    region[:] = blended
+                else:
+                    region[:] = ins
+                self.bg[y1:y2, x1:x2] = region
                 print("放置已确认")
 
     def save(self, output_path=OUTPUT_PATH):
@@ -464,12 +488,14 @@ if __name__ == "__main__":
         roi1 = app.get_roi_zoomed(pod_path, "Select Pod")
         if roi1 is not None:
             roi1 = app.match_background(roi1)
+            roi1 = app.auto_mask_object(roi1)
             app.interactive_place(roi1)
 
         print("\n>>> 第二步: 选择种子")
         roi2 = app.get_roi_zoomed(seed_path, "Select Seed")
         if roi2 is not None:
             roi2 = app.match_background(roi2)
+            roi2 = app.auto_mask_object(roi2, keep_top_k=2)
             app.interactive_place(roi2)
 
         app.save(output_path)
@@ -501,12 +527,14 @@ if __name__ == "__main__":
     roi1 = app.get_roi_zoomed(POD_PATH, "Select Pod")
     if roi1 is not None:
         roi1 = app.match_background(roi1)
+        roi1 = app.auto_mask_object(roi1)
         app.interactive_place(roi1)
 
     print("\n>>> 第二步: 选择种子")
     roi2 = app.get_roi_zoomed(SEED_PATH, "Select Seed")
     if roi2 is not None:
         roi2 = app.match_background(roi2)
+        roi2 = app.auto_mask_object(roi2, keep_top_k=2)
         app.interactive_place(roi2)
 
     app.save(OUTPUT_PATH)
