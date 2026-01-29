@@ -127,3 +127,4 @@ python main.py \
 - `CLEANING_GUIDE.md` — 清理细节与排错
 - `IMPROVEMENTS.md` — 变更摘要
 - `REEDIT_GUIDE.md` — 重做说明
+- `STEP_BY_STEP.md` — 新手操作流程
