@@ -1,18 +1,24 @@
 ﻿# Soybean-Image-Processor
 
-用于大豆（豆荚/种子）图像合成与背景清理的交互式工具。核心流程：
-1) 背景清理（手动框选）
+用于大豆（豆荚/种子）图像合成与背景清理的交互式工具。流程完全以人工操作为核心，保证结果可控：
+1) 清理背景（手动框选）
 2) 选择豆荚区域并放置
 3) 选择种子区域并放置
-4) 输出合成结果
+4) 输出最终合成图
 
-## 功能概览
+---
 
-- 背景清理（手动框选 + inpaint 修复）
-- 交互式抠取与放置
-  - 从豆荚/种子图选择区域
+## 功能简介
+
+- **背景清理（手动）**
+  - 在背景图上框选要移除的对象
+  - 单轮 inpaint 修复
+  - 清理完成后可选竖线裁切（保留右侧）
+- **交互式放置**
+  - 从豆荚/种子图中框选区域
   - 鼠标移动调整位置，滚轮缩放，左键确认
-- 背景色差自动匹配（前景与背景色差补偿）
+
+---
 
 ## 目录结构
 
@@ -23,28 +29,34 @@
 │  ├─ pod/              # 豆荚图（多组）
 │  └─ seed/             # 种子图（多组）
 ├─ main.py              # 交互式合成（支持参数化）
-├─ auto_clean.py        # 自动清理背景（可选）
-├─ batch_process.py     # 批量处理（按编号成组）
+├─ auto_clean.py        # 自动清理（可选）
+├─ batch_process.py     # 批处理（按编号成组）
 ├─ compare_bg.py        # 清理前后对比
-├─ CLEANING_GUIDE.md    # 清理算法与调参说明
-├─ IMPROVEMENTS.md      # 功能改进记录
+├─ CLEANING_GUIDE.md
+├─ IMPROVEMENTS.md
+├─ REEDIT_GUIDE.md
 └─ README.md
 ```
+
+---
 
 ## 环境依赖
 
 - Python 3.8+
-- 依赖包：opencv-python, numpy
+- opencv-python
+- numpy
 
-安装示例：
+安装：
 
 ```bash
 pip install opencv-python numpy
 ```
 
+---
+
 ## 批量处理（多组）
 
-三组图片分别放在以下目录，编号一致视为一组：
+三组图片分别放在以下目录，文件名中 **4 位编号**一致视为一组：
 
 ```
 images/bg/   GY2025HHN-0001.jpg
@@ -52,63 +64,66 @@ images/pod/  GY2025-0001.jpg
 images/seed/ GY-0001.jpg
 ```
 
-批量处理：
-
+运行：
 ```bash
 python batch_process.py
 ```
 
-### 运行时交互流程
+### 每组流程
+1) 背景窗口：框选需要移除区域
+2) 豆荚窗口：框选并放置
+3) 种子窗口：框选并放置
+4) 保存输出
 
-- 程序启动后会询问**从第几组开始**（例如输入 5）
-- 如果某组已经做过（有输出文件），会询问是否**覆盖重做**
-- 每一组处理顺序：
-  1) 打开背景图，手动框选要移除区域
-  2) 打开豆荚图，框选并放置
-  3) 打开种子图，框选并放置
-  4) 保存结果
+### 背景清理操作
+- **拖拽鼠标**：画矩形
+- **SPACE**：确认修复
+- **ESC**：取消本次清理
 
-### 背景清理操作说明
-
-1) 背景窗口弹出后，用鼠标左键拖拽画矩形，覆盖需要移除的物体（标尺/白牌等）。
-2) 可以画多个矩形，逐个标记。
-3) 按 `SPACE` 确认开始修复并进入下一步；按 `ESC` 取消本次清理。
-4) 窗口按高度 900px 缩放显示，实际处理为原图尺寸。
+### 可选裁切
+清理结束后会弹出裁切窗口：
+- 鼠标移动显示竖线
+- **左键点击**确认裁切（保留右侧）
+- **SPACE**跳过裁切
 
 ### 输出目录
-
 ```
 outputs/
-├─ bg_cleaned/   # 手动清理后的背景
-└─ final/        # 人工放置后的最终合成
+├─ bg_cleaned/   # 清理后的背景
+└─ final/        # 最终合成图
 ```
 
-## 单组处理
+---
 
-### 手动清理 + 合成
+## 单组处理
 
 ```bash
 python main.py
 ```
 
-或参数化指定输入/输出：
+或指定路径：
 
 ```bash
-python main.py --bg <bg_img> --pod <pod_img> --seed <seed_img> --out <output> --clean-bg --cleaned-out <bg_cleaned>
+python main.py \
+  --bg <bg_img> \
+  --pod <pod_img> \
+  --seed <seed_img> \
+  --out <output> \
+  --clean-bg \
+  --cleaned-out <bg_cleaned>
 ```
 
-## 输出文件
-
-- `outputs/bg_cleaned/<编号>_bg_cleaned.jpg`
-- `outputs/final/<编号>_final.jpg`
+---
 
 ## 注意事项
 
-- 批处理是完全交互式（每组都会弹窗）。
-- 若想跳过背景清理，可去掉 `--clean-bg` 并直接使用已清理背景。
+- 批处理是全交互式，每组都会弹窗。
+- 需要重做某一组时，参考 `REEDIT_GUIDE.md`。
+
+---
 
 ## 相关文档
 
-- `CLEANING_GUIDE.md`
-- `IMPROVEMENTS.md`
-- `REEDIT_GUIDE.md`
+- `CLEANING_GUIDE.md` — 清理细节与排错
+- `IMPROVEMENTS.md` — 变更摘要
+- `REEDIT_GUIDE.md` — 重做说明
