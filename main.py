@@ -38,9 +38,15 @@ class UltimatePaster:
             drawing = False
             rect_start = None
             current_pos = None
+            cancel_current = False
+
+            def rebuild_mask():
+                mask[:] = 0
+                for rx1, ry1, rx2, ry2 in rects:
+                    cv2.rectangle(mask, (rx1, ry1), (rx2, ry2), 255, -1)
 
             def mouse_callback(event, x, y, flags, param):
-                nonlocal drawing, rect_start, rects, current_pos
+                nonlocal drawing, rect_start, rects, current_pos, cancel_current
                 real_x = int(x / disp_scale)
                 real_y = int(y / disp_scale)
 
@@ -57,8 +63,20 @@ class UltimatePaster:
                         x1, x2 = min(x1, x2), max(x1, x2)
                         y1, y2 = min(y1, y2), max(y1, y2)
                         rects.append((x1, y1, x2, y2))
-                        cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
+                        rebuild_mask()
                         print(f"标记区域: ({x1}, {y1}) -> ({x2}, {y2})")
+                elif event == cv2.EVENT_RBUTTONDOWN:
+                    if drawing:
+                        # cancel current drawing
+                        drawing = False
+                        rect_start = None
+                        current_pos = None
+                        cancel_current = True
+                        print("已取消当前框选")
+                    elif rects:
+                        rects.pop()
+                        rebuild_mask()
+                        print("已撤销上一个框选")
 
             win_name = "清理背景 - 绘制矩形 | 空格确认 | ESC取消"
             cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
@@ -164,15 +182,12 @@ class UltimatePaster:
         else:
             src_disp = src.copy()
 
-        print(f"在 [{win_name}] 中选择感兴趣区域，然后按空格或回车键")
-        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-        roi_rect = cv2.selectROI(win_name, src_disp, showCrosshair=True, fromCenter=False)
-        cv2.destroyWindow(win_name)
-
-        x_s, y_s, w_s, h_s = roi_rect
-        if w_s == 0 or h_s == 0:
+        print(f"在 [{win_name}] 中框选区域，按 SPACE/ENTER 确认，右键撤销")
+        roi_rect = self._select_roi_interactive(src_disp, win_name)
+        if roi_rect is None:
             return None
 
+        x_s, y_s, w_s, h_s = roi_rect
         real_x, real_y = int(x_s / scale), int(y_s / scale)
         real_w, real_h = int(w_s / scale), int(h_s / scale)
         return src[real_y:real_y + real_h, real_x:real_x + real_w]
@@ -197,9 +212,10 @@ class UltimatePaster:
             src_disp = src.copy()
 
         win_name = "选择植株颜色参考"
-        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
-        roi_rect = cv2.selectROI(win_name, src_disp, showCrosshair=True, fromCenter=False)
-        cv2.destroyWindow(win_name)
+        roi_rect = self._select_roi_interactive(src_disp, win_name)
+        if roi_rect is None:
+            print("未选择参考区域，将使用默认参考色。")
+            return False
 
         x_s, y_s, w_s, h_s = roi_rect
         if w_s == 0 or h_s == 0:
@@ -216,6 +232,69 @@ class UltimatePaster:
         self.color_ref = np.mean(ref_patch, axis=(0, 1))
         print("已设置植株颜色参考。")
         return True
+
+    def _select_roi_interactive(self, img_disp, win_name):
+        rect_start = None
+        current_pos = None
+        drawing = False
+        rect = None
+
+        def mouse_callback(event, x, y, flags, param):
+            nonlocal rect_start, current_pos, drawing, rect
+            if event == cv2.EVENT_MOUSEMOVE:
+                current_pos = (x, y)
+            elif event == cv2.EVENT_LBUTTONDOWN:
+                drawing = True
+                rect_start = (x, y)
+            elif event == cv2.EVENT_LBUTTONUP:
+                if drawing and rect_start:
+                    drawing = False
+                    x1, y1 = rect_start
+                    x2, y2 = x, y
+                    x1, x2 = min(x1, x2), max(x1, x2)
+                    y1, y2 = min(y1, y2), max(y1, y2)
+                    rect = (x1, y1, x2 - x1, y2 - y1)
+            elif event == cv2.EVENT_RBUTTONDOWN:
+                if drawing:
+                    drawing = False
+                    rect_start = None
+                    current_pos = None
+                    print("已取消当前框选")
+                elif rect is not None:
+                    rect = None
+                    print("已撤销上一个框选")
+
+        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+        cv2.setMouseCallback(win_name, mouse_callback)
+
+        while True:
+            preview = img_disp.copy()
+            overlay = preview.copy()
+
+            if rect is not None:
+                x1, y1, w1, h1 = rect
+                x2, y2 = x1 + w1, y1 + h1
+                cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1)
+                cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 255), 2)
+                preview = cv2.addWeighted(overlay, 0.35, preview, 0.65, 0)
+
+            if drawing and rect_start and current_pos:
+                x1, y1 = rect_start
+                x2, y2 = current_pos
+                x1, x2 = min(x1, x2), max(x1, x2)
+                y1, y2 = min(y1, y2), max(y1, y2)
+                cv2.rectangle(preview, (x1, y1), (x2, y2), (255, 255, 0), 2)
+
+            cv2.imshow(win_name, preview)
+            key = cv2.waitKey(10) & 0xFF
+            if key in (32, 13):  # SPACE or ENTER
+                break
+            if key == 27:  # ESC
+                rect = None
+                break
+
+        cv2.destroyWindow(win_name)
+        return rect
 
     def interactive_place(self, inset_img):
         current_scale = (self.bg.shape[1] * 0.35) / inset_img.shape[1]
