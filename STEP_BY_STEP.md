@@ -110,7 +110,8 @@ outputs/bg_cleaned/<编号>_bg_cleaned.jpg
 
 ## 如果中途不满意怎么办？
 
-重新运行 `python batch_process.py`，程序会问你从第几组开始，并询问是否覆盖已有结果。
+首先在终端中使用快捷键Ctrl+C退出当前程序
+然后重新运行 `python batch_process.py`，程序会问你从第几组开始，并询问是否覆盖已有结果。
 
 ---
 
