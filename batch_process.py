@@ -59,7 +59,20 @@ def main():
 
     print(f'Found {len(ids)} groups.')
 
+    start_input = input(f'Start from which group? (1-{len(ids)}, default 1): ').strip()
+    try:
+        start_idx = int(start_input) if start_input else 1
+    except ValueError:
+        start_idx = 1
+    if start_idx < 1:
+        start_idx = 1
+    if start_idx > len(ids):
+        print('Start index exceeds group count. Nothing to do.')
+        return
+
     for idx, img_id in enumerate(ids, 1):
+        if idx < start_idx:
+            continue
         bg_path = bg_map[img_id]
         pod_path = pod_map[img_id]
         seed_path = seed_map[img_id]
@@ -68,8 +81,10 @@ def main():
         final_path = out_final / f'{img_id}_final.jpg'
 
         if final_path.exists() and not args.force:
-            print(f'[{idx}/{len(ids)}] Skip {img_id} (final exists)')
-            continue
+            resp = input(f'[{idx}/{len(ids)}] {img_id} already done. Redo and overwrite? (y/N): ').strip().lower()
+            if resp != 'y':
+                print(f'[{idx}/{len(ids)}] Skip {img_id}')
+                continue
 
         print(f'[{idx}/{len(ids)}] Processing {img_id}')
         cmd = [
