@@ -36,12 +36,15 @@ class UltimatePaster:
             rects = []
             drawing = False
             rect_start = None
+            current_pos = None
 
             def mouse_callback(event, x, y, flags, param):
-                nonlocal drawing, rect_start, rects
+                nonlocal drawing, rect_start, rects, current_pos
                 real_x = int(x / disp_scale)
                 real_y = int(y / disp_scale)
 
+                if event == cv2.EVENT_MOUSEMOVE:
+                    current_pos = (real_x, real_y)
                 if event == cv2.EVENT_LBUTTONDOWN:
                     drawing = True
                     rect_start = (real_x, real_y)
@@ -62,13 +65,20 @@ class UltimatePaster:
 
             while True:
                 preview = bg_work.copy()
-                if rects:
+                if rects or (drawing and rect_start and current_pos):
                     overlay = preview.copy()
                     for x1, y1, x2, y2 in rects:
                         cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), -1)
                         cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 255), 3)
                         cv2.putText(preview, 'REMOVE', (x1, max(0, y1 - 10)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                    if drawing and rect_start and current_pos:
+                        x1, y1 = rect_start
+                        x2, y2 = current_pos
+                        x1, x2 = min(x1, x2), max(x1, x2)
+                        y1, y2 = min(y1, y2), max(y1, y2)
+                        cv2.rectangle(preview, (x1, y1), (x2, y2), (255, 255, 0), 2)
+                        cv2.rectangle(overlay, (x1, y1), (x2, y2), (255, 255, 0), -1)
                     preview = cv2.addWeighted(overlay, 0.35, preview, 0.65, 0)
 
                 disp_h, disp_w = int(bg_h * disp_scale), int(bg_w * disp_scale)
