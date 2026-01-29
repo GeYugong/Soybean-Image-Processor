@@ -78,7 +78,7 @@ class UltimatePaster:
                         rebuild_mask()
                         print("已撤销上一个框选")
 
-            win_name = "清理背景"
+            win_name = "Background Cleanup"
             cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
             cv2.setMouseCallback(win_name, mouse_callback)
 
@@ -136,7 +136,7 @@ class UltimatePaster:
             elif event == cv2.EVENT_LBUTTONDOWN:
                 crop_x = real_x
 
-        crop_win = "选择裁剪线"
+        crop_win = "Crop Line"
         cv2.namedWindow(crop_win, cv2.WINDOW_NORMAL)
         cv2.setMouseCallback(crop_win, crop_mouse_callback)
 
@@ -211,7 +211,7 @@ class UltimatePaster:
         else:
             src_disp = src.copy()
 
-        win_name = "选择参考色"
+        win_name = "Select Color Reference"
         roi_rect = self._select_roi_interactive(src_disp, win_name)
         if roi_rect is None:
             print("未选择参考区域，将使用默认参考色。")
@@ -301,7 +301,7 @@ class UltimatePaster:
         pos = [0, 0]
         placed = False
 
-        win_name = "调整位置与大小"
+        win_name = "Adjust Position & Size"
         cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
 
         screen_h = 900.0
@@ -405,13 +405,13 @@ if __name__ == "__main__":
             app.clean_background(args.cleaned_out)
         app.select_color_reference()
         print("\n>>> 第一步: 选择豆荚")
-        roi1 = app.get_roi_zoomed(pod_path, "选择豆荚")
+        roi1 = app.get_roi_zoomed(pod_path, "Select Pod")
         if roi1 is not None:
             roi1 = app.match_background(roi1)
             app.interactive_place(roi1)
 
         print("\n>>> 第二步: 选择种子")
-        roi2 = app.get_roi_zoomed(seed_path, "选择种子")
+        roi2 = app.get_roi_zoomed(seed_path, "Select Seed")
         if roi2 is not None:
             roi2 = app.match_background(roi2)
             app.interactive_place(roi2)
@@ -442,13 +442,13 @@ if __name__ == "__main__":
 
     app.select_color_reference()
     print("\n>>> 第一步: 选择豆荚")
-    roi1 = app.get_roi_zoomed(POD_PATH, "选择豆荚")
+    roi1 = app.get_roi_zoomed(POD_PATH, "Select Pod")
     if roi1 is not None:
         roi1 = app.match_background(roi1)
         app.interactive_place(roi1)
 
     print("\n>>> 第二步: 选择种子")
-    roi2 = app.get_roi_zoomed(SEED_PATH, "选择种子")
+    roi2 = app.get_roi_zoomed(SEED_PATH, "Select Seed")
     if roi2 is not None:
         roi2 = app.match_background(roi2)
         app.interactive_place(roi2)
